@@ -6,7 +6,7 @@ A source can be a Claude marketplace repo, a single plugin inside one, a repo th
 
 ## Status
 
-Phase 2 of the build: the package loads, owns its paths and pack manifest, and answers `market_list` / `/market`. The adapters, converter, installer and panel land in the following phases. Tracked in [issue #1](https://github.com/mystery4f/pi-market/issues/1); scope and acceptance lines in `docs/scope.md`.
+Working end to end against [phuryn/pm-skills](https://github.com/phuryn/pm-skills): 9 plugins, 72 skills, 42 commands, no errors. Adapters, converter, installer, the seven tools, every `/market` verb and the panel are in. Tracked in [issue #1](https://github.com/mystery4f/pi-market/issues/1); the scope and its acceptance lines live in `docs/scope.md`, the measured run in `docs/verify.md`.
 
 ## Install
 
