@@ -70,7 +70,7 @@ async function cloneFresh(url: string, dir: string): Promise<void> {
   await git(["clone", "--quiet", url, dir]);
 }
 
-async function updateClone(url: string, dir: string, ref?: string): Promise<void> {
+async function updateClone(_url: string, dir: string, ref?: string): Promise<void> {
   await git(["fetch", "--quiet", "origin", "--tags"], dir);
   const target = ref === undefined ? "FETCH_HEAD" : ref;
   await git(["checkout", "--quiet", target], dir);
