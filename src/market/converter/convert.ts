@@ -2,12 +2,12 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PluginModel, SourceModel } from "../adapters/types.ts";
 import { field, joinFrontmatter, splitFrontmatter, unquote } from "./frontmatter.ts";
-import { namespaced, segmentProblem } from "./naming.ts";
+import { foldSegment, namespaced, segmentProblem } from "./naming.ts";
 import { type Rewrite, rewriteBody } from "./rewrite.ts";
 import { detectTombstone } from "./tombstone.ts";
 
 export interface ConvertedSkill {
-  /** Namespaced name, which is also the directory name. */
+  /** Prefixed name, which is also the directory name. */
   name: string;
   sourceName: string;
   plugin: string;
@@ -38,6 +38,8 @@ export interface ConvertResult {
 }
 
 export interface ConvertOptions {
+  /** Prefix the user configured for this source, applied to every artefact name. */
+  prefix: string;
   /** Where skills are written; the parent of one directory per skill. */
   skillsDir: string;
   /** Where prompt templates are written; one `<name>.md` per command. */
@@ -50,22 +52,63 @@ function slash(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
-function sourceNames(model: SourceModel): { commandNames: Set<string>; skillNames: Set<string> } {
-  const commandNames = new Set<string>();
-  const skillNames = new Set<string>();
-  for (const plugin of model.plugins) {
-    for (const command of plugin.commands) commandNames.add(command.name);
-    for (const skill of plugin.skills) skillNames.add(skill.name);
-  }
-  return { commandNames, skillNames };
+interface NamePlan {
+  resolveCommand: (name: string) => string | undefined;
+  resolveSkill: (name: string, plugin?: string) => string | undefined;
+  nameOfCommand: (plugin: string, name: string) => string | undefined;
+  nameOfSkill: (plugin: string, name: string) => string | undefined;
 }
 
-/** Rewrite a skill in place: namespaced `name`, rewritten body, tombstone flag reported. */
+/** Plugin and entry names never contain a colon, so it separates the two halves of a key. */
+function keyOf(plugin: string, name: string): string {
+  return `${plugin}:${name}`;
+}
+
+/**
+ * Names are `<prefix>-<entry name>` for every plugin of one source, so a marketplace whose plugins
+ * are all `pm-*` installs `pm-retro`, not `pm-execution-retro`. Planning up front lets the reference
+ * rewrites point at names this same run will install.
+ */
+function planNames(model: SourceModel, prefix: string): NamePlan {
+  const head = foldSegment(prefix);
+  const skills = new Set<string>();
+  const commands = new Set<string>();
+  for (const plugin of model.plugins) {
+    for (const skill of plugin.skills) skills.add(keyOf(plugin.name, skill.name));
+    for (const command of plugin.commands) commands.add(keyOf(plugin.name, command.name));
+  }
+
+  const lookup =
+    (declared: Set<string>) =>
+    (name: string, plugin?: string): string | undefined => {
+      const declaredHere =
+        plugin === undefined
+          ? [...declared].some((key) => key.endsWith(`:${name}`))
+          : declared.has(keyOf(plugin, name));
+      if (!declaredHere || segmentProblem(name)) return undefined;
+      return namespaced(head, name);
+    };
+
+  return {
+    resolveCommand: lookup(commands),
+    resolveSkill: lookup(skills),
+    nameOfCommand: (plugin, name) => {
+      const installed = commands.has(keyOf(plugin, name)) && !segmentProblem(name);
+      return installed ? namespaced(head, name) : undefined;
+    },
+    nameOfSkill: (plugin, name) => {
+      const installed = skills.has(keyOf(plugin, name)) && !segmentProblem(name);
+      return installed ? namespaced(head, name) : undefined;
+    },
+  };
+}
+
+/** Rewrite a skill in place: prefixed `name`, rewritten body, tombstone flag reported. */
 async function convertSkill(
   plugin: PluginModel,
   skill: { name: string; dir: string },
   options: ConvertOptions,
-  shared: { commandNames: Set<string>; skillNames: Set<string> },
+  plan: NamePlan,
   taken: Set<string>,
   errors: ConvertError[],
 ): Promise<ConvertedSkill | undefined> {
@@ -76,7 +119,11 @@ async function convertSkill(
     return undefined;
   }
 
-  const name = namespaced(plugin.name, skill.name);
+  const name = plan.nameOfSkill(plugin.name, skill.name);
+  if (name === undefined) {
+    errors.push({ source, message: `${skill.name} cannot be part of a name; skipped` });
+    return undefined;
+  }
   if (taken.has(name)) {
     errors.push({ source, message: `${name} is already taken; skipped` });
     return undefined;
@@ -94,9 +141,8 @@ async function convertSkill(
   const document = splitFrontmatter(await readFile(skillFile, "utf8"));
   const description = unquote(field(document.fields, "description"));
   const { text, rewrites } = rewriteBody(document.body, {
-    plugin: plugin.name,
-    commandNames: shared.commandNames,
-    skillNames: shared.skillNames,
+    resolveCommand: plan.resolveCommand,
+    resolveSkill: plan.resolveSkill,
     installedDir: slash(dir),
   });
 
@@ -117,12 +163,12 @@ async function convertSkill(
   };
 }
 
-/** A command becomes a prompt template: same body, pi frontmatter, namespaced file name. */
+/** A command becomes a prompt template: same body, pi frontmatter, prefixed file name. */
 async function convertCommand(
   plugin: PluginModel,
   command: { name: string; file: string },
   options: ConvertOptions,
-  shared: { commandNames: Set<string>; skillNames: Set<string> },
+  plan: NamePlan,
   taken: Set<string>,
   errors: ConvertError[],
 ): Promise<ConvertedCommand | undefined> {
@@ -133,7 +179,11 @@ async function convertCommand(
     return undefined;
   }
 
-  const name = namespaced(plugin.name, command.name);
+  const name = plan.nameOfCommand(plugin.name, command.name);
+  if (name === undefined) {
+    errors.push({ source, message: `${command.name} cannot be part of a name; skipped` });
+    return undefined;
+  }
   if (taken.has(name)) {
     errors.push({ source, message: `${name} is already taken; skipped` });
     return undefined;
@@ -143,9 +193,8 @@ async function convertCommand(
   const file = join(options.promptsDir, `${name}.md`);
   const document = splitFrontmatter(await readFile(command.file, "utf8"));
   const { text, rewrites } = rewriteBody(document.body, {
-    plugin: plugin.name,
-    commandNames: shared.commandNames,
-    skillNames: shared.skillNames,
+    resolveCommand: plan.resolveCommand,
+    resolveSkill: plan.resolveSkill,
     installedDir: slash(options.promptsDir),
   });
 
@@ -164,11 +213,11 @@ async function convertCommand(
 
 /**
  * Turn a source model into pi artefacts: one directory per skill, one prompt template per command,
- * every name namespaced, every reference rewritten. A single failing entry lands in `errors` and
- * the rest of the source still installs.
+ * every name carrying the configured prefix, every reference rewritten. A single failing entry lands
+ * in `errors` and the rest of the source still installs.
  */
 export async function convert(model: SourceModel, options: ConvertOptions): Promise<ConvertResult> {
-  const shared = sourceNames(model);
+  const plan = planNames(model, options.prefix);
   // Skills and prompts live in separate namespaces in pi, so a plugin may ship both a
   // `business-model` skill and a `business-model` command: only same-kind names collide.
   const takenSkills = new Set<string>(options.existing?.skills ?? []);
@@ -183,18 +232,11 @@ export async function convert(model: SourceModel, options: ConvertOptions): Prom
   const commands: ConvertedCommand[] = [];
   for (const plugin of model.plugins) {
     for (const skill of plugin.skills) {
-      const converted = await convertSkill(plugin, skill, options, shared, takenSkills, errors);
+      const converted = await convertSkill(plugin, skill, options, plan, takenSkills, errors);
       if (converted) skills.push(converted);
     }
     for (const command of plugin.commands) {
-      const converted = await convertCommand(
-        plugin,
-        command,
-        options,
-        shared,
-        takenCommands,
-        errors,
-      );
+      const converted = await convertCommand(plugin, command, options, plan, takenCommands, errors);
       if (converted) commands.push(converted);
     }
   }

@@ -33,7 +33,7 @@ export async function verbList(): Promise<VerbResult> {
     const pin = pack.pin ? ` pinned at ${pack.pin}` : "";
     const errors = pack.errors > 0 ? `, ${pack.errors} skipped` : "";
     lines.push(
-      `${pack.slug} — ${pack.skills} skills, ${pack.prompts} prompts${errors} (${pack.adapter}, ${pack.commit.slice(0, 7)}${pin})`,
+      `${pack.slug} — ${pack.skills} skills, ${pack.prompts} prompts${errors} (${pack.prefix}, ${pack.adapter}, ${pack.commit.slice(0, 7)}${pin})`,
     );
   }
   for (const problem of result.problems) {
@@ -55,6 +55,9 @@ export async function verbDoctor(): Promise<VerbResult> {
 
 export interface InstallVerbArgs {
   source: string;
+  /** Every artefact name starts with `<prefix>-`; e.g. a marketplace whose plugins are all `pm-*`
+   * installs `pm-retro` with `--prefix pm`. Required. */
+  prefix: string;
   plugins?: readonly string[];
   adapter?: string;
 }
@@ -63,6 +66,7 @@ export async function verbInstall(args: InstallVerbArgs): Promise<VerbResult> {
   const settings = await SettingsStore.load(settingsPath());
   const outcome = await installSource({
     source: args.source,
+    prefix: args.prefix,
     root: marketDir(),
     cacheRoot: cacheRoot(),
     settings,

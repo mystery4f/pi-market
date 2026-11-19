@@ -48,7 +48,7 @@ describe("verb surface", () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
-        const installed = await verbInstall({ source, plugins: ["pm-execution"] });
+        const installed = await verbInstall({ source, prefix: "pm", plugins: ["pm-execution"] });
         expect(installed.text).toContain("mkt installed");
         expect(installed.text).toContain("(1 plugins, 2 skills, 2 prompts)");
         expect((installed.details.manifest as { plugins: string[] }).plugins).toContain(
@@ -71,7 +71,7 @@ describe("verb surface", () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
-        const installed = await verbInstall({ source });
+        const installed = await verbInstall({ source, prefix: "pm" });
         const packDir = installed.details.packDir as string;
 
         const disabled = await verbDisable(packDir);
@@ -94,7 +94,7 @@ describe("verb surface", () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
-        const installed = await verbInstall({ source });
+        const installed = await verbInstall({ source, prefix: "pm" });
         const packDir = installed.details.packDir as string;
 
         const removed = await verbRemove(packDir);
@@ -110,7 +110,7 @@ describe("verb surface", () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
-        await verbInstall({ source });
+        await verbInstall({ source, prefix: "pm" });
         // Drop the registry entry as if by hand.
         const settingsFile = join(dir, "agent", "settings.json");
         const settings = await SettingsStore.load(settingsFile);
@@ -127,7 +127,7 @@ describe("verb surface", () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
-        await verbInstall({ source });
+        await verbInstall({ source, prefix: "pm" });
         const result = await verbUpdate();
         expect(result.text).toContain("already at");
       });

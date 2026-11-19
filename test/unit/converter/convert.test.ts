@@ -86,7 +86,7 @@ describe("convert", () => {
       const model = await writeSource(dir);
       const skillsDir = join(dir, "pack", "generated", "skills");
       const promptsDir = join(dir, "pack", "generated", "prompts");
-      const result = await convert(model, { skillsDir, promptsDir });
+      const result = await convert(model, { prefix: "pm-execution", skillsDir, promptsDir });
 
       expect(result.skills.map((skill) => skill.name)).toEqual([
         "pm-execution-retro",
@@ -108,7 +108,11 @@ describe("convert", () => {
     await withTempDir(async (dir) => {
       const model = await writeSource(dir);
       const promptsDir = join(dir, "pack", "generated", "prompts");
-      const result = await convert(model, { skillsDir: join(dir, "s"), promptsDir });
+      const result = await convert(model, {
+        prefix: "pm-execution",
+        skillsDir: join(dir, "s"),
+        promptsDir,
+      });
 
       expect(result.commands.map((command) => command.name)).toEqual(["pm-execution-write-prd"]);
       const document = splitFrontmatter(
@@ -125,6 +129,7 @@ describe("convert", () => {
     await withTempDir(async (dir) => {
       const model = await writeSource(dir);
       const result = await convert(model, {
+        prefix: "pm-execution",
         skillsDir: join(dir, "pack", "generated", "skills"),
         promptsDir: join(dir, "pack", "generated", "prompts"),
       });
@@ -141,6 +146,7 @@ describe("convert", () => {
       const model = await writeSource(dir);
       const skillsDir = join(dir, "pack", "generated", "skills");
       const result = await convert(model, {
+        prefix: "pm-execution",
         skillsDir,
         promptsDir: join(dir, "pack", "generated", "prompts"),
         existing: { skills: ["pm-execution-retro"] },
@@ -194,7 +200,7 @@ describe("convert", () => {
 
       const skillsDir = join(dir, "pack", "generated", "skills");
       const promptsDir = join(dir, "pack", "generated", "prompts");
-      const result = await convert(model, { skillsDir, promptsDir });
+      const result = await convert(model, { prefix: "pm-strategy", skillsDir, promptsDir });
 
       expect(result.errors).toEqual([]);
       expect(result.skills.map((skill) => skill.name)).toEqual(["pm-strategy-business-model"]);
@@ -211,6 +217,7 @@ describe("convert", () => {
     await withTempDir(async (dir) => {
       const model = await writeSource(dir);
       const result = await convert(model, {
+        prefix: "pm-execution",
         skillsDir: join(dir, "pack", "generated", "skills"),
         promptsDir: join(dir, "pack", "generated", "prompts"),
       });

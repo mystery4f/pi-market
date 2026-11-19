@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { rewriteBody } from "../../../src/market/converter/rewrite.ts";
 
 const context = {
-  plugin: "pm-execution",
-  commandNames: new Set(["backlog", "write-prd"]),
-  skillNames: new Set(["retro"]),
+  resolveCommand: (name: string) =>
+    ["backlog", "write-prd"].includes(name) ? `pm-execution-${name}` : undefined,
+  resolveSkill: (name: string, plugin?: string) => {
+    if (name !== "retro") return undefined;
+    return plugin === undefined || plugin === "pm-execution" ? "pm-execution-retro" : undefined;
+  },
   installedDir: "/pack/generated/skills/pm-execution-retro",
 };
 

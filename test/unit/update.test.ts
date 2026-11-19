@@ -30,6 +30,7 @@ async function installFixture(dir: string, source: string): Promise<PackManifest
   await writeFile(settingsFile, "{}", "utf8");
   const outcome = await installSource({
     source,
+    prefix: "pm",
     cacheRoot: join(dir, "cache"),
     root: join(dir, "market"),
     settings: await SettingsStore.load(settingsFile),

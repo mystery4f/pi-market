@@ -25,6 +25,11 @@ export async function updatePack(
   pack: PackManifest,
   options: UpdateOptions,
 ): Promise<UpdateOutcome> {
+  if (pack.prefix === undefined || pack.prefix.length === 0) {
+    throw new Error(
+      `${pack.slug} has no prefix (older pack); reinstall it with \`market_install\` to set one`,
+    );
+  }
   const fetched = await fetchSource(pack.source, options.cacheRoot);
   const commit = fetched.commit;
 
@@ -40,6 +45,7 @@ export async function updatePack(
 
   const outcome = await installFromDir({
     source: pack.source,
+    prefix: pack.prefix,
     sourceDir: fetched.dir,
     commit,
     ...(fetched.ref === undefined ? {} : { ref: fetched.ref }),

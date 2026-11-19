@@ -25,6 +25,8 @@ const MARKET_VERBS = [
 const InstallParams = Type.Object({
   /** Source: a local path, an `owner/repo`, a git URL, or git+... — with an optional `@ref`. */
   source: Type.String(),
+  /** Prefix every artefact name starts with: `pm` turns a `retro` skill into `pm-retro`. */
+  prefix: Type.String(),
   /** Only these plugins of the source; every plugin when omitted. */
   plugins: Type.Optional(Type.Array(Type.String())),
   /** Force a specific adapter id instead of auto-detection. */
@@ -162,14 +164,16 @@ export default function marketExtension(pi: ExtensionAPI): void {
         switch (verb) {
           case "install": {
             const [source, flag] = rest;
-            if (!source || flag?.startsWith("-")) {
+            const flags = firstFlag(rest.slice(1));
+            const prefix = flags.prefix;
+            if (!source || flag?.startsWith("-") || !prefix) {
               ctx.ui.notify(
-                "Usage: /market install <source> [--plugins a,b] [--adapter id]",
+                "Usage: /market install <source> --prefix pm [--plugins a,b] [--adapter id]",
                 "error",
               );
               return;
             }
-            result = await verbInstall({ source, ...firstFlag(rest.slice(1)) });
+            result = await verbInstall({ source, prefix, ...flags });
             break;
           }
           case "update":
@@ -214,9 +218,9 @@ export default function marketExtension(pi: ExtensionAPI): void {
   });
 }
 
-/** Turn `--plugins a,b --adapter x` into the verb args the installer expects. */
-function firstFlag(rest: string[]): { plugins?: string[]; adapter?: string } {
-  const out: { plugins?: string[]; adapter?: string } = {};
+/** Turn `--plugins a,b --prefix pm --adapter x` into the verb args the installer expects. */
+function firstFlag(rest: string[]): { plugins?: string[]; prefix?: string; adapter?: string } {
+  const out: { plugins?: string[]; prefix?: string; adapter?: string } = {};
   for (let index = 0; index < rest.length; index += 1) {
     const token = rest[index];
     const value = rest[index + 1];
@@ -225,6 +229,9 @@ function firstFlag(rest: string[]): { plugins?: string[]; adapter?: string } {
         .split(",")
         .map((part) => part.trim())
         .filter(Boolean);
+      index += 1;
+    } else if (token === "--prefix" && value) {
+      out.prefix = value;
       index += 1;
     } else if (token === "--adapter" && value) {
       out.adapter = value;

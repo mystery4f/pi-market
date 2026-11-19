@@ -24,6 +24,8 @@ export function slugFor(source: string): string {
 export interface InstallInput {
   /** What the user typed, normalised — recorded so `market update` can fetch it again. */
   source: string;
+  /** Prefix the user configured: every artefact name starts with `<prefix>-`. Required in input. */
+  prefix: string;
   /** Where the source tree is right now: a clone, or a local directory the user pointed at. */
   sourceDir: string;
   commit: string;
@@ -78,6 +80,7 @@ export async function installFromDir(input: InstallInput): Promise<InstallOutcom
   });
 
   const result = await convert(model, {
+    prefix: input.prefix,
     skillsDir: join(packDir, "generated", "skills"),
     promptsDir: join(packDir, "generated", "prompts"),
     ...(input.existing === undefined ? {} : { existing: input.existing }),
@@ -96,6 +99,7 @@ export async function installFromDir(input: InstallInput): Promise<InstallOutcom
   const manifest: PackManifest = {
     slug,
     source: input.source,
+    prefix: input.prefix,
     adapter: model.adapter,
     commit: input.commit,
     ...(input.ref === undefined ? {} : { ref: input.ref }),

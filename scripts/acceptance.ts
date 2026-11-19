@@ -27,6 +27,7 @@ await writeFile(settingsPath, '{\n  "model": "keep-me"\n}\n', "utf8");
 
 const outcome = await installSource({
   source: resolve(source),
+  prefix: "pm",
   cacheRoot: join(work, "cache"),
   root,
   settings: await SettingsStore.load(settingsPath),

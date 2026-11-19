@@ -27,6 +27,7 @@ describe("installPack", () => {
 
       const outcome = await installFromDir({
         source: "phuryn/pm-skills",
+        prefix: "pm",
         sourceDir,
         commit: "a".repeat(40),
         root: join(dir, "market"),
@@ -38,13 +39,13 @@ describe("installPack", () => {
       expect(outcome.manifest.adapter).toBe("claude-marketplace");
       expect(outcome.manifest.installedAt).toBe("2026-01-01T00:00:00.000Z");
       expect(outcome.manifest.artifacts.skills).toEqual([
-        "pm-execution-grill",
-        "pm-execution-retro",
-        "pm-strategy-vision",
+        "pm-grill",
+        "pm-retro",
+        "pm-vision",
       ]);
       expect(outcome.manifest.artifacts.prompts).toEqual([
-        "pm-execution-backlog",
-        "pm-execution-qna",
+        "pm-backlog",
+        "pm-qna",
       ]);
 
       const settingsText = await readFile(settingsFile, "utf8");
@@ -60,6 +61,7 @@ describe("installPack", () => {
 
       const first = await installFromDir({
         source: "phuryn/pm-skills",
+        prefix: "pm",
         sourceDir,
         commit: "b".repeat(40),
         root: join(dir, "market"),
@@ -70,6 +72,7 @@ describe("installPack", () => {
 
       const second = await installFromDir({
         source: "phuryn/pm-skills",
+        prefix: "pm",
         sourceDir,
         commit: "c".repeat(40),
         root: join(dir, "market"),
@@ -92,6 +95,7 @@ describe("installPack", () => {
       await expect(
         installFromDir({
           source: "x/empty",
+          prefix: "pm",
           sourceDir: empty,
           commit: "d".repeat(40),
           root: join(dir, "market"),
@@ -106,6 +110,7 @@ describe("installPack", () => {
       const sourceDir = await writeMarketplace(dir);
       const outcome = await installFromDir({
         source: "phuryn/pm-skills",
+        prefix: "pm",
         sourceDir,
         commit: "e".repeat(40),
         root: join(dir, "market"),
@@ -114,8 +119,8 @@ describe("installPack", () => {
       });
       expect(outcome.manifest.plugins).toEqual(["pm-execution"]);
       expect(outcome.manifest.artifacts.skills).toEqual([
-        "pm-execution-grill",
-        "pm-execution-retro",
+        "pm-grill",
+        "pm-retro",
       ]);
     });
   });

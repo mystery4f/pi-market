@@ -7,6 +7,8 @@ export interface PackManifest {
   slug: string;
   /** The source as the user typed it, normalised — what `market update` fetches again. */
   source: string;
+  /** The prefix the user configured for this source; every artefact name starts with it. */
+  prefix: string;
   adapter: string;
   /** Commit the artifacts were converted from. */
   commit: string;
@@ -26,6 +28,7 @@ export interface PackManifest {
 export interface PackSummary {
   slug: string;
   source: string;
+  prefix: string;
   adapter: string;
   commit: string;
   pin?: string;
@@ -46,6 +49,7 @@ export function summarise(manifest: PackManifest): PackSummary {
   return {
     slug: manifest.slug,
     source: manifest.source,
+    prefix: manifest.prefix,
     adapter: manifest.adapter,
     commit: manifest.commit,
     ...(manifest.pin === undefined ? {} : { pin: manifest.pin }),

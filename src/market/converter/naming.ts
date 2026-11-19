@@ -1,4 +1,4 @@
-/** Every generated artefact is `<plugin>-<source name>` (ADR 0003). */
+/** Every generated artefact is `<prefix>-<source name>` (ADR 0004). */
 export const MAX_NAME_LENGTH = 64;
 
 const SEGMENT = /^[a-z0-9][a-z0-9-]*$/;
@@ -24,6 +24,12 @@ export function foldSegment(value: string): string {
   );
 }
 
-export function namespaced(plugin: string, name: string): string {
-  return `${foldSegment(plugin)}-${foldSegment(name)}`;
+/** The configured prefix plus the entry's own name: `pm` + `retro` becomes `pm-retro`. */
+export function namespaced(prefix: string, name: string): string {
+  const head = foldSegment(prefix);
+  const tail = foldSegment(name);
+  const joined = `${head}-${tail}`;
+  return joined.length > MAX_NAME_LENGTH
+    ? joined.slice(0, MAX_NAME_LENGTH).replace(/-+$/, "")
+    : joined;
 }

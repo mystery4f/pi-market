@@ -7,11 +7,10 @@ export interface Rewrite {
 }
 
 export interface RewriteContext {
-  plugin: string;
-  /** Command names declared by the source: only these are treated as slash references. */
-  commandNames: ReadonlySet<string>;
-  /** Skill names declared by the source, for `Skill(name)` cross-references. */
-  skillNames: ReadonlySet<string>;
+  /** Installed name of a declared command, or `undefined` when the source does not declare it. */
+  resolveCommand: (name: string) => string | undefined;
+  /** Installed name of a declared skill; `plugin` narrows the lookup to one plugin's skills. */
+  resolveSkill: (name: string, plugin?: string) => string | undefined;
   /** Where the skill's own files were installed, absolute. */
   installedDir: string;
 }
@@ -56,34 +55,33 @@ export function rewriteRelativeLinks(
  */
 export function rewriteSlashReferences(
   body: string,
-  plugin: string,
-  commandNames: ReadonlySet<string>,
+  resolveCommand: (name: string) => string | undefined,
   rewrites: Rewrite[],
 ): string {
   return body.replace(
     /(^|[\s(`])[/]([a-z0-9][a-z0-9-]*)(?=[\s)`.,;:!?]|$)/gm,
-    (whole, lead: string, name) => {
-      if (!commandNames.has(name)) return whole;
-      const rewritten = `${lead}/${plugin}-${name}`;
-      rewrites.push({ from: `/${name}`, to: `/${plugin}-${name}` });
+    (whole, lead: string, name: string) => {
+      const installed = resolveCommand(name);
+      if (installed === undefined) return whole;
+      const rewritten = `${lead}/${installed}`;
+      rewrites.push({ from: `/${name}`, to: `/${installed}` });
       return rewritten;
     },
   );
 }
 
-/** `Skill(name)` and `Skill(plugin:name)` both become `Skill(<plugin>-<name>)`. */
+/** `Skill(name)` and `Skill(plugin:name)` both become `Skill(<installed name>)`. */
 export function rewriteSkillReferences(
   body: string,
-  plugin: string,
-  skillNames: ReadonlySet<string>,
+  resolveSkill: (name: string, plugin?: string) => string | undefined,
   rewrites: Rewrite[],
 ): string {
   return body.replace(
     /Skill\(([a-z0-9-]+)(?::([a-z0-9-]+))?\)/g,
     (whole, first: string, second?: string) => {
-      const name = second ?? first;
-      if (!skillNames.has(name)) return whole;
-      const rewritten = `Skill(${plugin}-${name})`;
+      const installed = second === undefined ? resolveSkill(first) : resolveSkill(second, first);
+      if (installed === undefined) return whole;
+      const rewritten = `Skill(${installed})`;
       rewrites.push({ from: whole, to: rewritten });
       return rewritten;
     },
@@ -110,7 +108,7 @@ export function rewriteBody(
 ): { text: string; rewrites: Rewrite[] } {
   const rewrites: Rewrite[] = [];
   let text = rewriteRelativeLinks(body, context.installedDir, rewrites);
-  text = rewriteSlashReferences(text, context.plugin, context.commandNames, rewrites);
-  text = rewriteSkillReferences(text, context.plugin, context.skillNames, rewrites);
+  text = rewriteSlashReferences(text, context.resolveCommand, rewrites);
+  text = rewriteSkillReferences(text, context.resolveSkill, rewrites);
   return { text, rewrites: dedupe(rewrites) };
 }

@@ -17,6 +17,7 @@ export function manifest(overrides: Partial<PackManifest> = {}): PackManifest {
   return {
     slug: "phuryn-pm-skills",
     source: "claude-marketplace:phuryn/pm-skills",
+    prefix: "pm",
     adapter: "claude-marketplace",
     commit: "0123456789abcdef0123456789abcdef01234567",
     ref: "main",
