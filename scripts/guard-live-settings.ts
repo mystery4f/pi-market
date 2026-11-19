@@ -5,12 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SettingsStore } from "../src/market/registry/settings.ts";
 
-const live = process.argv[2] ?? join(process.env.USERPROFILE ?? "", ".pi", "agent", "settings.json");
+const live =
+  process.argv[2] ?? join(process.env.USERPROFILE ?? "", ".pi", "agent", "settings.json");
 const dir = mkdtempSync(join(tmpdir(), "pi-market-live-"));
 const copy = join(dir, "settings.json");
 copyFileSync(live, copy);
 
-const before = JSON.parse(readFileSync(copy, "utf8")) as { packages: unknown[] } & Record<string, unknown>;
+const before = JSON.parse(readFileSync(copy, "utf8")) as { packages: unknown[] } & Record<
+  string,
+  unknown
+>;
 console.log("before:", before.packages.length, "packages,", Object.keys(before).length, "keys");
 
 const store = await SettingsStore.load(copy);
