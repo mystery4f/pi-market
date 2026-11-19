@@ -33,7 +33,7 @@ export const localDirAdapter: SourceAdapter = {
 
     if (await exists(join(root, "SKILL.md"))) {
       const manifest = await readJson<{ name?: string }>(join(root, "package.json"));
-      const name = manifest?.name ?? basename(root);
+      const name = manifest?.name ? manifest.name.replace(/^@[^/]+\//, "") : basename(root);
       return model("local-dir", root, [{ name, skills: [{ name, dir: root }], commands: [] }], []);
     }
 
