@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { installPack, slugFor } from "../../src/market/install.ts";
+import { installFromDir, slugFor } from "../../src/market/install.ts";
 import { SettingsStore } from "../../src/market/registry/settings.ts";
 import { withTempDir } from "../support/fixtures.ts";
 import { writeMarketplace } from "../support/source-fixtures.ts";
@@ -25,7 +25,7 @@ describe("installPack", () => {
       const settingsFile = join(dir, "settings.json");
       await writeFile(settingsFile, '{\n  "model": "keep-me"\n}', "utf8");
 
-      const outcome = await installPack({
+      const outcome = await installFromDir({
         source: "phuryn/pm-skills",
         sourceDir,
         commit: "a".repeat(40),
@@ -58,7 +58,7 @@ describe("installPack", () => {
       const settingsFile = join(dir, "settings.json");
       await writeFile(settingsFile, "{}", "utf8");
 
-      const first = await installPack({
+      const first = await installFromDir({
         source: "phuryn/pm-skills",
         sourceDir,
         commit: "b".repeat(40),
@@ -68,7 +68,7 @@ describe("installPack", () => {
         now: () => new Date("2026-01-01T00:00:00.000Z"),
       });
 
-      const second = await installPack({
+      const second = await installFromDir({
         source: "phuryn/pm-skills",
         sourceDir,
         commit: "c".repeat(40),
@@ -90,7 +90,7 @@ describe("installPack", () => {
       const empty = join(dir, "empty");
       await mkdir(empty, { recursive: true });
       await expect(
-        installPack({
+        installFromDir({
           source: "x/empty",
           sourceDir: empty,
           commit: "d".repeat(40),
@@ -104,7 +104,7 @@ describe("installPack", () => {
   it("installs only the plugins the user asked for", async () => {
     await withTempDir(async (dir) => {
       const sourceDir = await writeMarketplace(dir);
-      const outcome = await installPack({
+      const outcome = await installFromDir({
         source: "phuryn/pm-skills",
         sourceDir,
         commit: "e".repeat(40),

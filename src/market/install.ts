@@ -6,6 +6,7 @@ import type { PackManifest } from "./packs.ts";
 import { bridgePath, writeBridge } from "./registry/bridge.ts";
 import { readPack, writePack } from "./registry/pack.ts";
 import type { SettingsStore } from "./registry/settings.ts";
+import { fetchSource } from "./source.ts";
 
 /** A source identifier reduced to the one directory name its pack lives in. */
 export function slugFor(source: string): string {
@@ -19,6 +20,7 @@ export function slugFor(source: string): string {
   return foldSegment(last.length === 0 ? basename(withoutRef) : last);
 }
 
+/** What every install needs to convert an already-materialised source tree. */
 export interface InstallInput {
   /** What the user typed, normalised — recorded so `market update` can fetch it again. */
   source: string;
@@ -38,6 +40,11 @@ export interface InstallInput {
   now?: () => Date;
 }
 
+/** The user-facing entry point: fetch the source first, then install from its tree. */
+export interface InstallRequest extends Omit<InstallInput, "sourceDir" | "commit" | "ref"> {
+  cacheRoot: string;
+}
+
 export interface InstallOutcome {
   manifest: PackManifest;
   packDir: string;
@@ -45,12 +52,22 @@ export interface InstallOutcome {
   bridge: string;
 }
 
+export async function installSource(request: InstallRequest): Promise<InstallOutcome> {
+  const fetched = await fetchSource(request.source, request.cacheRoot);
+  return installFromDir({
+    ...request,
+    sourceDir: fetched.dir,
+    commit: fetched.commit,
+    ...(fetched.ref === undefined ? {} : { ref: fetched.ref }),
+  });
+}
+
 /**
- * Install one source as one pack: read it, convert it, write the manifest, and register the bridge
- * package in settings. A re-install keeps `installedAt` and the pin, so an update reads as an update
- * rather than a fresh install.
+ * Convert one source tree into one pack: read it, convert it, write the manifest, and register
+ * the bridge package in settings. A re-install keeps `installedAt` and the pin, so an update
+ * reads as an update rather than a fresh install.
  */
-export async function installPack(input: InstallInput): Promise<InstallOutcome> {
+export async function installFromDir(input: InstallInput): Promise<InstallOutcome> {
   const slug = slugFor(input.source);
   const packDir = join(input.root, slug);
   const previous = await readPack(packDir);
