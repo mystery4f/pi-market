@@ -9,6 +9,7 @@ import {
   verbRemove,
   verbUpdate,
 } from "./market/commands.ts";
+import { openMarketPanel } from "./market/panel/open.ts";
 
 const MARKET_VERBS = [
   "list",
@@ -18,6 +19,7 @@ const MARKET_VERBS = [
   "doctor",
   "disable",
   "enable",
+  "panel",
 ] as const;
 
 const InstallParams = Type.Object({
@@ -146,7 +148,7 @@ export default function marketExtension(pi: ExtensionAPI): void {
   // ——— the /market command family, backed by the same verbs ———
   pi.registerCommand("market", {
     description:
-      "Manage market packs: list; install <source>; update [pack]; remove|disable|enable <pack>; doctor",
+      "Manage market packs: panel (interactive list); list; install <source>; update [pack]; remove|disable|enable <pack>; doctor",
     handler: async (args: string, ctx: ExtensionCommandContext) => {
       const [verb, ...rest] = args.trim().split(/\s+/);
       const known = verb === "" || MARKET_VERBS.includes(verb as (typeof MARKET_VERBS)[number]);
@@ -194,6 +196,9 @@ export default function marketExtension(pi: ExtensionAPI): void {
             }
             result = await verbEnable(rest[0]);
             break;
+          case "panel":
+            await openMarketPanel(ctx);
+            return;
           case "doctor":
             result = await verbDoctor();
             break;
