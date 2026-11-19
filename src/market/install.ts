@@ -109,10 +109,16 @@ export async function installFromDir(input: InstallInput): Promise<InstallOutcom
     },
     rewrites: [
       ...result.skills.flatMap((skill) =>
-        skill.rewrites.map((rewrite) => ({ ...rewrite, where: `${skill.name}/SKILL.md` })),
+        skill.rewrites.map((rewrite) => ({
+          ...rewrite,
+          where: `generated/skills/${skill.name}/SKILL.md`,
+        })),
       ),
       ...result.commands.flatMap((command) =>
-        command.rewrites.map((rewrite) => ({ ...rewrite, where: command.name })),
+        command.rewrites.map((rewrite) => ({
+          ...rewrite,
+          where: `generated/prompts/${command.name}.md`,
+        })),
       ),
     ],
     errors: result.errors,

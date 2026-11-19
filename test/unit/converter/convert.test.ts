@@ -115,7 +115,7 @@ describe("convert", () => {
         await readFile(join(promptsDir, "pm-execution-write-prd.md"), "utf8"),
       );
       expect(document.fields).toContainEqual(["argument-hint", "<feature>"]);
-      expect(document.fields[0]).toEqual(["name", "pm-execution-write-prd"]);
+      expect(document.fields.map(([key]) => key)).toEqual(["description", "argument-hint"]);
       expect(document.body).toContain("$ARGUMENTS");
       expect(document.body).toContain("Skill(pm-execution-retro)");
     });
@@ -151,6 +151,59 @@ describe("convert", () => {
       await expect(
         readFile(join(skillsDir, "pm-execution-retro", "SKILL.md"), "utf8"),
       ).rejects.toThrow();
+    });
+  });
+
+  it("lets a plugin ship a skill and a command under the same name", async () => {
+    await withTempDir(async (dir) => {
+      const plugin = join(dir, "source", "pm-strategy");
+      await mkdir(join(plugin, "skills", "business-model"), { recursive: true });
+      await mkdir(join(plugin, "commands"), { recursive: true });
+      await writeFile(
+        join(plugin, "skills", "business-model", "SKILL.md"),
+        [
+          "---",
+          "name: business-model",
+          "description: Sketch a model",
+          "---",
+          "",
+          "# Model",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        join(plugin, "commands", "business-model.md"),
+        ["---", "description: Draft a model", "---", "", "Draft it.", ""].join("\n"),
+        "utf8",
+      );
+      const model: SourceModel = {
+        adapter: "claude-marketplace",
+        root: join(dir, "source"),
+        notes: [],
+        plugins: [
+          {
+            name: "pm-strategy",
+            skills: [{ name: "business-model", dir: join(plugin, "skills", "business-model") }],
+            commands: [
+              { name: "business-model", file: join(plugin, "commands", "business-model.md") },
+            ],
+          },
+        ],
+      };
+
+      const skillsDir = join(dir, "pack", "generated", "skills");
+      const promptsDir = join(dir, "pack", "generated", "prompts");
+      const result = await convert(model, { skillsDir, promptsDir });
+
+      expect(result.errors).toEqual([]);
+      expect(result.skills.map((skill) => skill.name)).toEqual(["pm-strategy-business-model"]);
+      expect(result.commands.map((command) => command.name)).toEqual([
+        "pm-strategy-business-model",
+      ]);
+      expect(await readFile(join(promptsDir, "pm-strategy-business-model.md"), "utf8")).toContain(
+        "Draft it.",
+      );
     });
   });
 

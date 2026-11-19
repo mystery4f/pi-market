@@ -43,7 +43,9 @@ export function rewriteRelativeLinks(
 
     const absolute = posix.join(installedDir.replace(/\\/g, "/"), path.replace(/^\.\//, ""));
     const rewritten = `](${absolute}${anchor})`;
-    rewrites.push({ from: whole, to: rewritten });
+    // The record names the target only, not the surrounding syntax: `` `]` `` and `` `)` `` are noise
+    // when a reader wants to know which link moved.
+    rewrites.push({ from: target, to: `${absolute}${anchor}` });
     return rewritten;
   });
 }
@@ -63,7 +65,7 @@ export function rewriteSlashReferences(
     (whole, lead: string, name) => {
       if (!commandNames.has(name)) return whole;
       const rewritten = `${lead}/${plugin}-${name}`;
-      rewrites.push({ from: whole, to: rewritten });
+      rewrites.push({ from: `/${name}`, to: `/${plugin}-${name}` });
       return rewritten;
     },
   );
@@ -88,6 +90,19 @@ export function rewriteSkillReferences(
   );
 }
 
+/** One entry per distinct change: a reference used three times is still one thing to explain. */
+function dedupe(rewrites: readonly Rewrite[]): Rewrite[] {
+  const seen = new Set<string>();
+  const unique: Rewrite[] = [];
+  for (const rewrite of rewrites) {
+    const key = JSON.stringify([rewrite.from, rewrite.to]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(rewrite);
+  }
+  return unique;
+}
+
 /** Every reference rule in the order a reader would meet them. */
 export function rewriteBody(
   body: string,
@@ -97,5 +112,5 @@ export function rewriteBody(
   let text = rewriteRelativeLinks(body, context.installedDir, rewrites);
   text = rewriteSlashReferences(text, context.plugin, context.commandNames, rewrites);
   text = rewriteSkillReferences(text, context.plugin, context.skillNames, rewrites);
-  return { text, rewrites };
+  return { text, rewrites: dedupe(rewrites) };
 }

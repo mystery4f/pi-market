@@ -33,6 +33,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "acceptance": "jiti scripts/acceptance.ts",
     "verify": "npm run check && npm run lint && npm run test"
   },
   "devDependencies": {

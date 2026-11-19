@@ -26,3 +26,9 @@ Within pi-market itself, two packs shipping the same plugin name is refused at i
 - **Prefix only on collision.** Shorter names, but a pack installed later renames nothing while a pack installed earlier may have kept the bare name — so the same skill is `retro` on one machine and `pm-execution-retro` on another, and an update can flip it.
 - **Skip on collision with a warning.** Silence is the failure this whole extension exists to remove: the user believes 18 skills installed and 16 did.
 - **A user-supplied prefix per source.** Invites `""`, `"a"` and duplicates, and makes pack identity depend on configuration rather than on the source.
+
+## Scope of "taken"
+
+pi keeps skills and prompt templates in two separate namespaces: a skill is resolved by `Skill(name)`, a prompt by `/name`. The acceptance source ships eight plugins that declare both a skill and a command under one name (`pm-product-strategy/business-model`, `pm-execution/pre-mortem`, `pm-toolkit/draft-nda`, …), and both are usable, so a skill name and a prompt name may coincide. Only same-kind names collide: two skills under one name, or two prompts under one name. Refusing the cross-kind pair would have dropped eight of the source's 42 commands for no gain.
+
+The same reasoning fixes what a prompt template may declare: pi takes its command name from the file name, reads only `description` and `argument-hint` from the frontmatter, and ignores anything else, so a converted prompt carries no `name` key.

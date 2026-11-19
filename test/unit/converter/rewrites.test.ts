@@ -48,6 +48,15 @@ describe("rewriteBody", () => {
     expect(rewrites).toHaveLength(0);
   });
 
+  it("records each distinct change once, without the surrounding syntax", () => {
+    const body = "Run `/backlog`, then `/backlog` again, then `/write-prd`.";
+    const { rewrites } = rewriteBody(body, context);
+    expect(rewrites).toEqual([
+      { from: "/backlog", to: "/pm-execution-backlog" },
+      { from: "/write-prd", to: "/pm-execution-write-prd" },
+    ]);
+  });
+
   it("namespaces Skill(name) and Skill(plugin:name)", () => {
     const { text } = rewriteBody("Use Skill(retro) then Skill(pm-execution:retro).", context);
     expect(text).toBe("Use Skill(pm-execution-retro) then Skill(pm-execution-retro).");

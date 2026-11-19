@@ -149,7 +149,9 @@ async function convertCommand(
     installedDir: slash(options.promptsDir),
   });
 
-  const fields: [string, string][] = [["name", name]];
+  // pi names a prompt template after its file, so a `name` key would be dead weight: keep only the
+  // two fields pi reads.
+  const fields: [string, string][] = [];
   for (const key of ["description", "argument-hint"] as const) {
     const value = field(document.fields, key);
     if (value !== undefined) fields.push([key, value]);
@@ -167,10 +169,10 @@ async function convertCommand(
  */
 export async function convert(model: SourceModel, options: ConvertOptions): Promise<ConvertResult> {
   const shared = sourceNames(model);
-  const taken = new Set<string>([
-    ...(options.existing?.skills ?? []),
-    ...(options.existing?.prompts ?? []),
-  ]);
+  // Skills and prompts live in separate namespaces in pi, so a plugin may ship both a
+  // `business-model` skill and a `business-model` command: only same-kind names collide.
+  const takenSkills = new Set<string>(options.existing?.skills ?? []);
+  const takenCommands = new Set<string>(options.existing?.prompts ?? []);
   const errors: ConvertError[] = [];
 
   await rm(options.skillsDir, { recursive: true, force: true });
@@ -181,11 +183,18 @@ export async function convert(model: SourceModel, options: ConvertOptions): Prom
   const commands: ConvertedCommand[] = [];
   for (const plugin of model.plugins) {
     for (const skill of plugin.skills) {
-      const converted = await convertSkill(plugin, skill, options, shared, taken, errors);
+      const converted = await convertSkill(plugin, skill, options, shared, takenSkills, errors);
       if (converted) skills.push(converted);
     }
     for (const command of plugin.commands) {
-      const converted = await convertCommand(plugin, command, options, shared, taken, errors);
+      const converted = await convertCommand(
+        plugin,
+        command,
+        options,
+        shared,
+        takenCommands,
+        errors,
+      );
       if (converted) commands.push(converted);
     }
   }
