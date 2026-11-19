@@ -1,0 +1,9 @@
+{
+  "name": "pi-market: a pi extension that loads Claude-format skill/command marketplaces into managed packs",
+  "mode": "personal",
+  "topic": "pi-market: a pi extension that loads Claude-format skill/command marketplaces into managed packs",
+  "created": "2026-11-19",
+  "version": "1.0",
+  "vault_id": "df0884fd-1d8c-4d98-8617-b59c4dd760e9",
+  "knowledge_format": "okf-0.2"
+}

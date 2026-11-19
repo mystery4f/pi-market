@@ -1,0 +1,62 @@
+{
+  "name": "pi-market",
+  "version": "0.1.0",
+  "description": "Load Claude-format skill and command marketplaces into pi as managed packs, without touching your own skills",
+  "license": "MIT",
+  "author": "mystery4f <40482524+mystery4f@users.noreply.github.com>",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "skills",
+    "prompts",
+    "marketplace"
+  ],
+  "files": [
+    "src",
+    "README.md",
+    "GLOSSARY.md",
+    "docs"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "check": "tsc --noEmit && tsc -p tsconfig.dev.json",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "verify": "npm run check && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@earendil-works/pi-coding-agent": "^1.5.2",
+    "@types/node": "^22.19.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1",
+    "typebox": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=1.5.0",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  }
+}
