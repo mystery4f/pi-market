@@ -68,6 +68,30 @@ describe("SettingsStore", () => {
     );
   });
 
+  it("survives entries that carry their own empty arrays", async () => {
+    const original = {
+      packages: [
+        { source: "npm:pi-extmgr", extensions: [] },
+        "npm:@one/a",
+        { source: "npm:@two/b", extensions: [], skills: [] },
+      ],
+      model: "x",
+    };
+    await runWithText(JSON.stringify(original, null, 2), async (dir, file) => {
+      const store = await SettingsStore.load(file);
+      expect(store.packages()).toEqual(["npm:@one/a"]);
+      await store.addPack(join(dir, "packs", "slug-a"));
+      const added = JSON.parse(await readFile(file, "utf8")) as { packages: unknown[] };
+      expect(added.packages).toEqual([...original.packages, join(dir, "packs", "slug-a")]);
+    });
+  });
+
+  it("refuses to write when the span cannot be rebuilt cleanly", async () => {
+    await runWithText('{ "packages": [ "npm:@one/a" ]', async (_dir, file) => {
+      const store = await SettingsStore.load(file);
+      await expect(store.addPack(join("C:", "packs", "x"))).rejects.toThrow(/does not parse/);
+    });
+  });
   it("reports the bridge package name pi lists for a pack", () => {
     expect(SettingsStore.prototype.manifestName.call({}, "pm-skills")).toBe(
       "pi-market-bridge-pm-skills",
