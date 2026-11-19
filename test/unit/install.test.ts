@@ -38,15 +38,8 @@ describe("installPack", () => {
       expect(outcome.manifest.slug).toBe("phuryn-pm-skills");
       expect(outcome.manifest.adapter).toBe("claude-marketplace");
       expect(outcome.manifest.installedAt).toBe("2026-01-01T00:00:00.000Z");
-      expect(outcome.manifest.artifacts.skills).toEqual([
-        "pm-grill",
-        "pm-retro",
-        "pm-vision",
-      ]);
-      expect(outcome.manifest.artifacts.prompts).toEqual([
-        "pm-backlog",
-        "pm-qna",
-      ]);
+      expect(outcome.manifest.artifacts.skills).toEqual(["pm-grill", "pm-retro", "pm-vision"]);
+      expect(outcome.manifest.artifacts.prompts).toEqual(["pm-backlog", "pm-qna"]);
 
       const settingsText = await readFile(settingsFile, "utf8");
       expect(JSON.parse(settingsText)).toEqual({ model: "keep-me", packages: [outcome.packDir] });
@@ -118,10 +111,7 @@ describe("installPack", () => {
         plugins: ["pm-execution"],
       });
       expect(outcome.manifest.plugins).toEqual(["pm-execution"]);
-      expect(outcome.manifest.artifacts.skills).toEqual([
-        "pm-grill",
-        "pm-retro",
-      ]);
+      expect(outcome.manifest.artifacts.skills).toEqual(["pm-grill", "pm-retro"]);
     });
   });
 });

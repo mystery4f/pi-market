@@ -163,10 +163,10 @@ export default function marketExtension(pi: ExtensionAPI): void {
         let result: Awaited<ReturnType<typeof verbList>>;
         switch (verb) {
           case "install": {
-            const [source, flag] = rest;
+            const [source] = rest;
             const flags = firstFlag(rest.slice(1));
             const prefix = flags.prefix;
-            if (!source || flag?.startsWith("-") || !prefix) {
+            if (!source || source.startsWith("-") || !prefix) {
               ctx.ui.notify(
                 "Usage: /market install <source> --prefix pm [--plugins a,b] [--adapter id]",
                 "error",
