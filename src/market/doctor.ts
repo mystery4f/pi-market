@@ -1,7 +1,7 @@
 import { join, sep } from "node:path";
 import { listPacks, scanPackDir } from "./packs.ts";
 import { marketDir } from "./paths.ts";
-import { marketEntry } from "./registry/bridge.ts";
+import { EXTENSION_SOURCE, reachesPacks } from "./registry/bridge.ts";
 import type { SettingsStore } from "./registry/settings.ts";
 import { isEnabled } from "./state.ts";
 
@@ -24,14 +24,17 @@ export interface DoctorReport {
 export async function doctor(root: string, settings: SettingsStore): Promise<DoctorReport> {
   const issues: string[] = [];
   const result = await listPacks(root);
-  const entry = marketEntry(settings.filePath, root);
 
-  if (!settings.has(entry)) {
-    issues.push(`market package not registered in settings.json: add "${entry}" to packages`);
+  if (!reachesPacks(settings.packages())) {
+    issues.push(
+      `settings.json does not load ${EXTENSION_SOURCE}; packs stay invisible until it does`,
+    );
   }
   for (const value of settings.packages()) {
     if (value.startsWith(`${root}${sep}`)) {
-      issues.push(`per-pack entry left in settings.json: ${value} (packages needs "${entry}")`);
+      issues.push(
+        `per-pack entry left in settings.json: ${value} (only ${EXTENSION_SOURCE} is needed)`,
+      );
     }
   }
 

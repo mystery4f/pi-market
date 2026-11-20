@@ -20,7 +20,7 @@ describe("slugFor", () => {
 });
 
 describe("installFromDir", () => {
-  it("installs a marketplace, records it and registers the market once", async () => {
+  it("installs a marketplace and records it without touching settings.json", async () => {
     await withTempDir(async (dir) => {
       const sourceDir = await writeMarketplace(dir);
       const settingsFile = join(dir, "settings.json");
@@ -46,7 +46,7 @@ describe("installFromDir", () => {
       });
 
       const settingsText = await readFile(settingsFile, "utf8");
-      expect(JSON.parse(settingsText)).toEqual({ model: "keep-me", packages: ["market"] });
+      expect(JSON.parse(settingsText)).toEqual({ model: "keep-me" });
     });
   });
 

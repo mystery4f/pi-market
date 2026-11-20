@@ -24,6 +24,12 @@
   "pi": {
     "extensions": [
       "./src/index.ts"
+    ],
+    "skills": [
+      "../../../../../market/*/generated/skills"
+    ],
+    "prompts": [
+      "../../../../../market/*/generated/prompts"
     ]
   },
   "scripts": {

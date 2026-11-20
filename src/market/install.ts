@@ -4,7 +4,6 @@ import { type ConvertError, convert } from "./converter/convert.ts";
 import { foldSegment } from "./converter/naming.ts";
 import type { Rewrite } from "./converter/rewrite.ts";
 import { findPack, type PackRecord, scanPackDir, upsertPack } from "./packs.ts";
-import { marketEntry, writeMarketPackage } from "./registry/bridge.ts";
 import type { SettingsStore } from "./registry/settings.ts";
 import { fetchSource } from "./source.ts";
 
@@ -51,8 +50,8 @@ export interface InstallRequest extends Omit<InstallInput, "sourceDir" | "commit
 export interface InstallOutcome {
   record: PackRecord;
   packDir: string;
-  /** The one package pi loads every pack through. */
-  packageFile: string;
+  /** Where the pack's trees live, as the extension's manifest globs resolve them. */
+  generated: string;
   plugins: number;
   skills: number;
   prompts: number;
@@ -115,14 +114,12 @@ export async function installFromDir(input: InstallInput): Promise<InstallOutcom
   };
 
   await upsertPack(input.root, record);
-  const packageFile = await writeMarketPackage(input.root);
-  await input.settings.ensurePackage(marketEntry(input.settings.filePath, input.root));
   const artifacts = await scanPackDir(packDir);
 
   return {
     record,
     packDir,
-    packageFile,
+    generated: join(packDir, "generated"),
     plugins: model.plugins.length,
     skills: artifacts.skills.length,
     prompts: artifacts.prompts.length,

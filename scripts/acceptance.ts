@@ -77,7 +77,7 @@ const lines = [
   `errors     ${outcome.errors.length}`,
   `registry   ${registry.packs.map((pack) => pack.slug).join(", ")}`,
   ...outcome.errors.slice(0, 5).map((error) => `  ${error.source}: ${error.message}`),
-  `package    ${outcome.packageFile}`,
+  `generated  ${outcome.generated}`,
   `settings   ${(await readFile(settingsPath, "utf8")).replace(/\s+/g, " ")}`,
 ];
 

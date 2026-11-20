@@ -1,40 +1,24 @@
-import { join, relative } from "node:path";
-import { writeJson } from "./json.ts";
-
 /**
- * The one package pi loads for every pack in the market (ADR 0005). It lives at the market root and
- * globs each pack's generated trees, so installing or removing a pack never edits settings.json.
+ * How pi finds the packs (ADR 0006). This extension's own package.json globs the market trees, so
+ * settings.json needs nothing but the extension itself: the checkout sits five levels under `~/.pi`,
+ * which puts `~/.pi/market` at `../../../../../market` from the package root. pi resolves manifest
+ * paths relative to the root and allows `..`, so the globs reach the packs without a second entry.
  */
-export interface MarketPackage {
-  name: string;
-  version: string;
-  private: true;
-  pi: { skills: string[]; prompts: string[] };
-}
+export const MARKET_SKILLS_GLOB = "../../../../../market/*/generated/skills";
+export const MARKET_PROMPTS_GLOB = "../../../../../market/*/generated/prompts";
 
-export function marketPackage(): MarketPackage {
-  return {
-    name: "pi-market-packs",
-    version: "0.0.0",
-    private: true,
-    pi: { skills: ["./*/generated/skills"], prompts: ["./*/generated/prompts"] },
-  };
-}
-
-export function marketPackagePath(root: string): string {
-  return join(root, "package.json");
-}
-
-export async function writeMarketPackage(root: string): Promise<string> {
-  await writeJson(marketPackagePath(root), marketPackage());
-  return root;
+/** The skills and prompts this package declares, as pi reads them out of package.json. */
+export function manifestResources(): { skills: string[]; prompts: string[] } {
+  return { skills: [MARKET_SKILLS_GLOB], prompts: [MARKET_PROMPTS_GLOB] };
 }
 
 /**
- * How settings.json names the market root: relative to the settings file, so the entry survives a
- * moved home directory and reads the same on every machine.
+ * The entry the whole market is reachable through. It is this extension's own package, so the value
+ * is the one a user installs with; doctor reports it when it is missing.
  */
-export function marketEntry(settingsPath: string, root: string): string {
-  const relativePath = relative(join(settingsPath, ".."), root);
-  return relativePath.split("\\").join("/");
+export const EXTENSION_SOURCE = "pi-market";
+
+/** True when settings.json loads something that can reach the packs. */
+export function reachesPacks(entries: readonly string[]): boolean {
+  return entries.some((entry) => entry.includes(EXTENSION_SOURCE));
 }

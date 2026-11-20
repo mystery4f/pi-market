@@ -1,44 +1,35 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { scanPackDir } from "../../../src/market/packs.ts";
 import {
-  marketEntry,
-  marketPackage,
-  marketPackagePath,
-  writeMarketPackage,
+  EXTENSION_SOURCE,
+  MARKET_PROMPTS_GLOB,
+  MARKET_SKILLS_GLOB,
+  manifestResources,
+  reachesPacks,
 } from "../../../src/market/registry/bridge.ts";
 import { withTempDir } from "../../support/fixtures.ts";
 
-describe("market package", () => {
-  it("globs every pack's generated trees from the market root", () => {
-    const manifest = marketPackage();
-    expect(manifest.name).toBe("pi-market-packs");
-    expect(manifest.pi).toEqual({
-      skills: ["./*/generated/skills"],
-      prompts: ["./*/generated/prompts"],
+describe("manifest resources", () => {
+  it("globs the market trees from this package's own root", () => {
+    expect(manifestResources()).toEqual({
+      skills: [MARKET_SKILLS_GLOB],
+      prompts: [MARKET_PROMPTS_GLOB],
     });
+    expect(MARKET_SKILLS_GLOB.startsWith("..")).toBe(true);
   });
 
-  it("writes one package.json at the market root, outside every pack", async () => {
-    await withTempDir(async (dir) => {
-      const root = join(dir, "market");
-      await writeMarketPackage(root);
-
-      expect(marketPackagePath(root)).toBe(join(root, "package.json"));
-      const written = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
-        pi: { skills: string[] };
-      };
-      expect(written.pi.skills).toEqual(["./*/generated/skills"]);
-    });
+  it("keeps package.json in step with the globs the code relies on", async () => {
+    const text = await readFile(join(process.cwd(), "package.json"), "utf8");
+    const manifest = JSON.parse(text) as { pi: { skills: string[]; prompts: string[] } };
+    expect(manifest.pi.skills).toEqual([MARKET_SKILLS_GLOB]);
+    expect(manifest.pi.prompts).toEqual([MARKET_PROMPTS_GLOB]);
   });
 
-  it("names the market entry relative to the settings file, never absolutely", () => {
-    const entry = marketEntry(
-      join("C:", "Users", "me", ".pi", "agent", "settings.json"),
-      join("C:", "Users", "me", ".pi", "market"),
-    );
-    expect(entry).toBe("../market");
+  it("sees the packs through this extension's own entry, never through a per-pack one", () => {
+    expect(reachesPacks([`git:github.com/mystery4f/${EXTENSION_SOURCE}`])).toBe(true);
+    expect(reachesPacks(["C:/Users/me/.pi/market/phuryn-pm-skills"])).toBe(false);
   });
 });
 
@@ -62,7 +53,3 @@ describe("pack registry", () => {
     });
   });
 });
-
-function readFile(path: string, encoding: "utf8"): Promise<string> {
-  return import("node:fs/promises").then((fs) => fs.readFile(path, encoding));
-}

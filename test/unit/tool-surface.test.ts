@@ -1,4 +1,4 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -21,6 +21,12 @@ async function withEnv(root: string, base: string, run: () => Promise<void>): Pr
   const previousAgent = process.env.PI_CODING_AGENT_DIR;
   const agentDir = join(base, "agent");
   await mkdir(agentDir, { recursive: true });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    `${JSON.stringify({ packages: ["git:github.com/mystery4f/pi-market"] }, null, 2)}
+`,
+    "utf8",
+  );
   process.env.PI_MARKET_DIR = root;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
@@ -91,7 +97,7 @@ describe("verb surface", () => {
         );
         expect(await hasRegistry(root)).toBe(true);
         const settings = await SettingsStore.load(join(dir, "agent", "settings.json"));
-        expect(settings.packages()).toEqual(["../market"]);
+        expect(settings.packages()).toEqual(["git:github.com/mystery4f/pi-market"]);
 
         const enabled = await verbEnable(packDir);
         expect(enabled.text).toContain("enabled");
@@ -111,7 +117,7 @@ describe("verb surface", () => {
         const removed = await verbRemove(packDir);
         expect(removed.text).toContain("removed");
         const settings = await SettingsStore.load(join(dir, "agent", "settings.json"));
-        expect(settings.packages()).toEqual(["../market"]);
+        expect(settings.packages()).toEqual(["git:github.com/mystery4f/pi-market"]);
         const { registry } = await readRegistry(root);
         expect(registry.packs).toEqual([]);
         await expect(readdir(packDir)).rejects.toThrow(/ENOENT/);
@@ -124,14 +130,14 @@ describe("verb surface", () => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
         await verbInstall({ source, prefix: "pm" });
-        // Drop the market entry as if by hand; the registry keeps the pack.
+        // Drop the extension entry as if by hand; the registry keeps the pack.
         const settingsFile = join(dir, "agent", "settings.json");
         const settings = await SettingsStore.load(settingsFile);
-        await settings.removePackage("../market");
+        await settings.removePackage("git:github.com/mystery4f/pi-market");
 
         const health = await verbDoctor();
         expect(health.details.ok).toBe(false);
-        expect(health.text).toContain("not registered");
+        expect(health.text).toContain("does not load pi-market");
       });
     });
   });

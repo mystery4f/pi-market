@@ -26,8 +26,9 @@ Reload pi after changing its own source (`/reload`).
 | `…/sources/` | the fetched source tree, kept so an update can diff and reconcile |
 | `…/generated/skills/`, `…/generated/prompts/` | converted artifacts pi loads; disposable, rebuilt on update. A disabled pack keeps them as `generated.disabled/`, out of the glob's reach |
 | `~/.pi/market/market.json` | the one registry: source, prefix, adapter, commit, pin, timestamps per pack |
-| `~/.pi/market/package.json` | the one package pi loads: globs `*/generated/skills` and `*/generated/prompts` |
-| `settings.json` | one relative entry, `../market` — written once, never touched by installs |
+| `settings.json` | only the extension itself (`git:github.com/mystery4f/pi-market`); installing a pack never edits it |
+
+This package's own `package.json` globs `../../../../../market/*/generated/skills` and `.../generated/prompts`, so pi reaches every pack through the extension alone (ADR 0006).
 
 Every artifact name starts with the prefix you install with (`--prefix pm` → `pm-retro`). See `GLOSSARY.md` for the vocabulary and `docs/adr/` for the decisions.
 
@@ -40,7 +41,7 @@ Every artifact name starts with the prefix you install with (`--prefix pm` → `
 | `market_update` | fetch again, reconvert, reconcile removed artifacts |
 | `market_remove` | uninstall a pack: drop its record and its directory |
 | `market_disable` / enable | move `generated/` to `generated.disabled/` and back, keeping every file |
-| `market_doctor` | find a missing market entry, a leftover per-pack entry, or a half-present pack |
+| `market_doctor` | find a missing extension entry, a leftover per-pack entry, or a half-present pack |
 | `/market` | the same verbs, plus a panel to browse and press keys in |
 
 ## Development

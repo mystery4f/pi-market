@@ -1,6 +1,6 @@
 # ADR 0005 — One market package, registered once with a relative path
 
-Status: accepted (2026-11-20)
+Status: superseded by ADR 0006 (2026-11-20) — one registration stands, but it is this extension's own package, not a separate market package
 
 ## Context
 
