@@ -132,8 +132,7 @@ describe("verb surface", () => {
         await verbInstall({ source, prefix: "pm" });
         // Drop the extension entry as if by hand; the registry keeps the pack.
         const settingsFile = join(dir, "agent", "settings.json");
-        const settings = await SettingsStore.load(settingsFile);
-        await settings.removePackage("git:github.com/mystery4f/pi-market");
+        await writeFile(settingsFile, '{ "packages": ["npm:@one/a"] }', "utf8");
 
         const health = await verbDoctor();
         expect(health.details.ok).toBe(false);

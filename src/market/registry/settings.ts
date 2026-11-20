@@ -1,30 +1,31 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 const NON_PATH = /^(npm:|git:|builtin:)/;
-
-/** A local package path (the only kind we ever write), resolved so identity is stable. */
-export function entryFor(packDir: string): string {
-  if (isAbsolute(packDir)) return packDir;
-  return resolve(packDir);
-}
 
 function isLocal(value: string): boolean {
   return !NON_PATH.test(value);
 }
 
 /**
- * The `settings.packages` array, edited through the one key we own. Only the array's contents
- * are ours to change; the rest of the file is never touched.
+ * The `settings.packages` array, read only.
+ *
+ * pi hands extensions a read-only copy of settings (`ExtensionAPI.getSettings()`) and exposes
+ * no supported way to persist one, so this class parses and never writes: a bad write here
+ * costs the user their whole config, and the market needs no entry at all — the extension's own
+ * manifest reaches the packs through a relative glob (ADR 0006).
  */
 export class SettingsStore {
-  private text: string;
+  private readonly text: string;
+  /** Why `JSON.parse` refused the file, or undefined when it is intact. */
+  readonly parseError: string | undefined;
 
   private constructor(
     text: string,
     readonly filePath: string,
   ) {
     this.text = text;
+    this.parseError = parseProblem(text);
   }
 
   static async load(path: string): Promise<SettingsStore> {
@@ -37,6 +38,9 @@ export class SettingsStore {
 
   /** Every entry as written, including the object forms pi itself accepts. */
   entries(): unknown[] {
+    // A document pi itself refuses to parse is not a source of truth: report nothing rather
+    // than hand the caller spans carved out of a broken file.
+    if (this.parseError !== undefined) return [];
     return parseArray(this.text, "packages") ?? [];
   }
 
@@ -56,28 +60,48 @@ export class SettingsStore {
     return this.packages().some((value) => this.identity(value) === target);
   }
 
-  /** Add the one package entry pi needs for the whole market; a repeat call is a no-op. */
-  async ensurePackage(entry: string): Promise<void> {
-    if (this.has(entry)) return;
-    this.text = setArray(this.text, "packages", [...this.entries(), entry]);
-    assertParses(this.text, "ensurePackage");
-    await writeFile(this.filePath, this.text, "utf8");
-  }
-
-  /** Drop one package entry, leaving every other entry byte for byte as it was. */
-  async removePackage(entry: string): Promise<void> {
-    const target = this.identity(entry);
-    const all = this.entries();
-    const kept = all.filter((item) => {
-      if (typeof item !== "string") return true;
-      return this.identity(item) !== target;
-    });
-    if (kept.length === all.length) return;
-    this.text = setArray(this.text, "packages", kept);
-    assertParses(this.text, "removePackage");
-    await writeFile(this.filePath, this.text, "utf8");
+  /** Rewrites `settings.json.bak-*` files beside this one, newest first. Never writes. */
+  async backups(): Promise<string[]> {
+    const folder = dirname(this.filePath);
+    let names: string[];
+    try {
+      names = await readdir(folder);
+    } catch {
+      return [];
+    }
+    const found = names.filter((name) => name.startsWith(`${basenameOf(this.filePath)}.bak`));
+    const stamped = await Promise.all(
+      found.map(async (name) => ({
+        path: resolve(folder, name),
+        at: await mtime(resolve(folder, name)),
+      })),
+    );
+    return stamped.sort((left, right) => right.at - left.at).map((item) => item.path);
   }
 }
+
+function basenameOf(path: string): string {
+  const at = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return at === -1 ? path : path.slice(at + 1);
+}
+
+async function mtime(path: string): Promise<number> {
+  try {
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function parseProblem(text: string): string | undefined {
+  try {
+    JSON.parse(text);
+    return undefined;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
 /**
  * Locate the value of a top-level key that holds an array, by bracket depth: the `[` after the
  * key is matched to its own `]`, with strings skipped so a nested `[]` inside an entry cannot
@@ -152,33 +176,5 @@ function parseArray(text: string, key: string): unknown[] | undefined {
     return Array.isArray(value) ? value : undefined;
   } catch {
     return undefined;
-  }
-}
-
-/** Re-serialise only the matched array; everything outside it stays byte for byte. */
-function setArray(text: string, key: string, entries: unknown[]): string {
-  const rendered = entries.map((item) => `    ${JSON.stringify(item)}`).join(",\n");
-  const array = entries.length === 0 ? "[]" : `[\n${rendered}\n  ]`;
-  const bounds = arrayBounds(text, key);
-  if (bounds) return `${text.slice(0, bounds.start)}${array}${text.slice(bounds.end)}`;
-
-  // The key does not exist yet: add it as the last member of the top-level object.
-  const lastBrace = text.lastIndexOf("}");
-  if (lastBrace === -1) return text;
-  const head = text.slice(0, lastBrace);
-  const bare = head.trim() === "" || head.trim() === "{";
-  if (bare) return `{\n  "packages": ${array}\n}`;
-  const eol = head.endsWith("\n") ? "" : "\n";
-  return `${head}${eol},\n  "packages": ${array}\n${text.slice(lastBrace)}`;
-}
-
-/** Refuse to write a document that no longer parses: the array span must never eat the file. */
-function assertParses(text: string, context: string): void {
-  try {
-    JSON.parse(text);
-  } catch (error) {
-    throw new Error(
-      `${context}: refusing to write settings.json, result does not parse (${(error as Error).message})`,
-    );
   }
 }

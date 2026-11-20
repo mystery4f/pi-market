@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -25,81 +25,69 @@ describe("SettingsStore", () => {
       async (_dir, file) => {
         const store = await SettingsStore.load(file);
         expect(store.packages()).toEqual(["npm:@one/a", "C:\\packs\\a"]);
+        expect(store.parseError).toBeUndefined();
       },
     );
   });
 
-  it("adds a bridge entry without touching the rest of the file", async () => {
-    await runWithText(
-      JSON.stringify({ packages: ["npm:@one/a", "C:\\packs\\a"], model: "x" }, null, 2),
-      async (dir, file) => {
-        const store = await SettingsStore.load(file);
-        await store.ensurePackage(join(dir, "packs", "slug-a"));
-        const text = await readFile(file, "utf8");
-        expect(text).toContain(`"packages"`);
-        expect(text).toContain(JSON.stringify(join(dir, "packs", "slug-a")));
-        expect(JSON.parse(text)).toEqual({
-          packages: ["npm:@one/a", "C:\\packs\\a", join(dir, "packs", "slug-a")],
-          model: "x",
-        });
-      },
+  it("keeps object entries readable but out of the package list", async () => {
+    const text = JSON.stringify(
+      { packages: [{ source: "npm:pi-extmgr", extensions: [] }, "npm:@one/a"] },
+      null,
+      2,
     );
-  });
-
-  it("refuses to add the same pack twice even through a relative form", async () => {
-    await runWithText("{}", async (dir, file) => {
+    await runWithText(text, async (_dir, file) => {
       const store = await SettingsStore.load(file);
-      await store.ensurePackage(join(dir, "packs", "s"));
-      await store.ensurePackage(join(dir, "packs", "s"));
-      const text = await readFile(file, "utf8");
-      expect(JSON.parse(text)).toEqual({ packages: [join(dir, "packs", "s")] });
+      expect(store.packages()).toEqual(["npm:@one/a"]);
+      expect(store.entries()).toHaveLength(2);
     });
-  });
-
-  it("removes a bridge entry and keeps foreign ones", async () => {
-    await runWithText(
-      JSON.stringify({ packages: [join("C:", "packs", "a"), "npm:@one/a"] }, null, 2),
-      async (_dir, file) => {
-        const store = await SettingsStore.load(file);
-        await store.removePackage(join("C:", "packs", "a"));
-        const text = await readFile(file, "utf8");
-        expect(JSON.parse(text)).toEqual({ packages: ["npm:@one/a"] });
-      },
-    );
   });
 
   it("survives entries that carry their own empty arrays", async () => {
-    const original = {
-      packages: [
-        { source: "npm:pi-extmgr", extensions: [] },
-        "npm:@one/a",
-        { source: "npm:@two/b", extensions: [], skills: [] },
-      ],
-      model: "x",
-    };
-    await runWithText(JSON.stringify(original, null, 2), async (dir, file) => {
+    const text = JSON.stringify(
+      {
+        packages: [
+          { source: "npm:pi-extmgr", extensions: [] },
+          "npm:@one/a",
+          { source: "npm:@two/b", extensions: [], skills: [] },
+        ],
+        model: "x",
+      },
+      null,
+      2,
+    );
+    await runWithText(text, async (_dir, file) => {
       const store = await SettingsStore.load(file);
       expect(store.packages()).toEqual(["npm:@one/a"]);
-      await store.ensurePackage(join(dir, "packs", "slug-a"));
-      const added = JSON.parse(await readFile(file, "utf8")) as { packages: unknown[] };
-      expect(added.packages).toEqual([...original.packages, join(dir, "packs", "slug-a")]);
     });
   });
 
-  it("refuses to write when the span cannot be rebuilt cleanly", async () => {
+  it("matches a local entry against the directory the file lives in", async () => {
+    await runWithText(JSON.stringify({ packages: ["../market"] }), async (dir, file) => {
+      const store = await SettingsStore.load(file);
+      expect(store.has(join(dir, "..", "market"))).toBe(true);
+      expect(store.has(join(dir, "..", "elsewhere"))).toBe(false);
+    });
+  });
+
+  it("reports a broken document instead of pretending it is empty", async () => {
     await runWithText('{ "packages": [ "npm:@one/a" ]', async (_dir, file) => {
       const store = await SettingsStore.load(file);
-      await expect(store.ensurePackage(join("C:", "packs", "x"))).rejects.toThrow(/does not parse/);
+      expect(store.packages()).toEqual([]);
+      expect(store.parseError).toMatch(/after property value|Unexpected/);
     });
   });
-  it("adds the market entry once, however often an install runs", async () => {
-    await runWithText('{ "packages": ["npm:@one/a"] }', async (dir, file) => {
-      const store = await SettingsStore.load(file);
-      await store.ensurePackage(join(dir, "market"));
-      await store.ensurePackage(join(dir, "market"));
 
-      const again = await SettingsStore.load(file);
-      expect(again.packages()).toEqual(["npm:@one/a", join(dir, "market")]);
+  it("lists the backups beside the file, newest first", async () => {
+    await runWithText("{}", async (dir, file) => {
+      const older = join(dir, "settings.json.bak-migrate");
+      const newer = join(dir, "settings.json.bak-no-entry");
+      await writeFile(older, "{}", "utf8");
+      await writeFile(newer, "{}", "utf8");
+      await utimes(older, new Date(1_000_000), new Date(1_000_000));
+
+      const store = await SettingsStore.load(file);
+      expect(await store.backups()).toEqual([newer, older]);
     });
   });
 });
