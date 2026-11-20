@@ -1,4 +1,4 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,7 +10,7 @@ import {
   verbRemove,
   verbUpdate,
 } from "../../src/market/commands.ts";
-import { readPack } from "../../src/market/registry/pack.ts";
+import { readRegistry } from "../../src/market/packs.ts";
 import { SettingsStore } from "../../src/market/registry/settings.ts";
 import { withTempDir } from "../support/fixtures.ts";
 import { writeMarketplace } from "../support/source-fixtures.ts";
@@ -33,6 +33,16 @@ async function withEnv(root: string, base: string, run: () => Promise<void>): Pr
   }
 }
 
+/** True when the registry file exists in this market root. */
+async function hasRegistry(root: string): Promise<boolean> {
+  try {
+    await stat(join(root, "market.json"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("verb surface", () => {
   it("list reports empty when nothing is installed", async () => {
     await withTempDir(async (dir) => {
@@ -51,9 +61,6 @@ describe("verb surface", () => {
         const installed = await verbInstall({ source, prefix: "pm", plugins: ["pm-execution"] });
         expect(installed.text).toContain("mkt installed");
         expect(installed.text).toContain("(1 plugins, 2 skills, 2 prompts)");
-        expect((installed.details.manifest as { plugins: string[] }).plugins).toContain(
-          "pm-execution",
-        );
         const packDir = installed.details.packDir as string;
         expect(packDir).toContain(join("market", "mkt"));
 
@@ -67,54 +74,60 @@ describe("verb surface", () => {
     });
   });
 
-  it("disable keeps files but drops the registry entry; enable restores it", async () => {
+  it("disable moves the generated tree aside; enable brings it back", async () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
-      await withEnv(join(dir, "market"), dir, async () => {
+      const root = join(dir, "market");
+      await withEnv(root, dir, async () => {
         const installed = await verbInstall({ source, prefix: "pm" });
         const packDir = installed.details.packDir as string;
 
         const disabled = await verbDisable(packDir);
         expect(disabled.text).toContain("disabled");
+        // The files are kept, out of the glob's reach, and the market package is untouched.
+        await expect(readdir(join(root, "mkt", "generated"))).rejects.toThrow(/ENOENT/);
+        expect(await readdir(join(root, "mkt", "generated.disabled", "skills"))).not.toHaveLength(
+          0,
+        );
+        expect(await hasRegistry(root)).toBe(true);
         const settings = await SettingsStore.load(join(dir, "agent", "settings.json"));
-        expect(settings.packages()).not.toContain(packDir);
-        // The directory is still there.
-        const entries = await readdir(join(dir, "market", "mkt"));
-        expect(entries).toContain("pack.json");
+        expect(settings.packages()).toEqual(["../market"]);
 
         const enabled = await verbEnable(packDir);
         expect(enabled.text).toContain("enabled");
-        const after = await SettingsStore.load(join(dir, "agent", "settings.json"));
-        expect(after.packages()).toContain(packDir);
+        expect(await readdir(join(root, "mkt", "generated", "skills"))).not.toHaveLength(0);
       });
     });
   });
 
-  it("remove deletes the pack directory and registry entry", async () => {
+  it("remove deletes the pack directory and the registry record", async () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
-      await withEnv(join(dir, "market"), dir, async () => {
+      const root = join(dir, "market");
+      await withEnv(root, dir, async () => {
         const installed = await verbInstall({ source, prefix: "pm" });
         const packDir = installed.details.packDir as string;
 
         const removed = await verbRemove(packDir);
         expect(removed.text).toContain("removed");
         const settings = await SettingsStore.load(join(dir, "agent", "settings.json"));
-        expect(settings.packages()).not.toContain(packDir);
-        await expect(readPack(packDir)).resolves.toBeUndefined();
+        expect(settings.packages()).toEqual(["../market"]);
+        const { registry } = await readRegistry(root);
+        expect(registry.packs).toEqual([]);
+        await expect(readdir(packDir)).rejects.toThrow(/ENOENT/);
       });
     });
   });
 
-  it("doctor reports a pack on disk that the registry forgot", async () => {
+  it("doctor reports a pack on disk that the settings file forgot", async () => {
     await withTempDir(async (dir) => {
       const source = await writeMarketplace(dir);
       await withEnv(join(dir, "market"), dir, async () => {
         await verbInstall({ source, prefix: "pm" });
-        // Drop the registry entry as if by hand.
+        // Drop the market entry as if by hand; the registry keeps the pack.
         const settingsFile = join(dir, "agent", "settings.json");
         const settings = await SettingsStore.load(settingsFile);
-        await settings.removePack(join(dir, "market", "mkt"));
+        await settings.removePackage("../market");
 
         const health = await verbDoctor();
         expect(health.details.ok).toBe(false);

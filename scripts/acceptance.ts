@@ -9,6 +9,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { installSource } from "../src/market/install.ts";
+import { readRegistry, scanPackDir } from "../src/market/packs.ts";
 import { SettingsStore } from "../src/market/registry/settings.ts";
 
 const source = process.argv[2];
@@ -34,16 +35,26 @@ const outcome = await installSource({
   now: () => new Date("2026-11-20T00:00:00.000Z"),
 });
 
-const { manifest, packDir } = outcome;
+const { record, packDir } = outcome;
 const skillsDir = join(packDir, "generated", "skills");
+const artifacts = await scanPackDir(packDir);
 const skills = await readdir(skillsDir);
 const prompts = await readdir(join(packDir, "generated", "prompts"));
 
-/** Every rewrite has to have landed in the file it names: a record nobody applied is a lie. */
+/** Every rewrite has to have landed somewhere in the generated tree, or the record is a lie. */
+const generated: string[] = [];
+for (const name of skills) {
+  generated.push(await readFile(join(skillsDir, name, "SKILL.md"), "utf8").catch(() => ""));
+}
+for (const name of prompts) {
+  generated.push(
+    await readFile(join(packDir, "generated", "prompts", name), "utf8").catch(() => ""),
+  );
+}
+const corpus = generated.join(String.fromCharCode(10));
 const unresolved: string[] = [];
-for (const rewrite of manifest.rewrites) {
-  const body = await readFile(join(packDir, rewrite.where), "utf8").catch(() => "");
-  if (!body.includes(rewrite.to)) unresolved.push(`${rewrite.from} -> ${rewrite.to}`);
+for (const rewrite of outcome.rewrites) {
+  if (!corpus.includes(rewrite.to)) unresolved.push(`${rewrite.from} -> ${rewrite.to}`);
 }
 
 /** A tombstone is a skill whose description says where it moved; it still installs. */
@@ -53,17 +64,20 @@ for (const name of skills) {
   if (/^description: "?Moved to/im.test(body)) tombstones.push(name);
 }
 
+const { registry } = await readRegistry(root);
+
 const lines = [
-  `source     ${manifest.source}`,
-  `slug       ${manifest.slug} (${manifest.adapter})`,
-  `plugins    ${manifest.plugins.length}: ${manifest.plugins.join(" ")}`,
-  `skills     ${manifest.artifacts.skills.length} (${skills.length} directories)`,
-  `prompts    ${manifest.artifacts.prompts.length} (${prompts.length} files)`,
-  `rewrites   ${manifest.rewrites.length}, unresolved ${unresolved.length}`,
+  `source     ${record.source}`,
+  `slug       ${record.slug} (${record.adapter}) prefix ${record.prefix}`,
+  `plugins    ${outcome.plugins}`,
+  `skills     ${artifacts.skills.length} (${skills.length} directories)`,
+  `prompts    ${artifacts.prompts.length} (${prompts.length} files)`,
+  `rewrites   ${outcome.rewrites.length}, unresolved ${unresolved.length}`,
   `tombstones ${tombstones.length}: ${tombstones.join(" ")}`,
-  `errors     ${manifest.errors.length}`,
-  ...manifest.errors.slice(0, 5).map((error) => `  ${error.source}: ${error.message}`),
-  `bridge     ${outcome.bridge}`,
+  `errors     ${outcome.errors.length}`,
+  `registry   ${registry.packs.map((pack) => pack.slug).join(", ")}`,
+  ...outcome.errors.slice(0, 5).map((error) => `  ${error.source}: ${error.message}`),
+  `package    ${outcome.packageFile}`,
   `settings   ${(await readFile(settingsPath, "utf8")).replace(/\s+/g, " ")}`,
 ];
 

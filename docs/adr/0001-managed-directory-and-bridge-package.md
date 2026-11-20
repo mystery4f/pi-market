@@ -1,6 +1,6 @@
 # ADR 0001 — One managed directory per source, registered through a generated bridge package
 
-Status: accepted (2026-11-19)
+Status: superseded by ADR 0005 (2026-11-20) — the managed directory stands; the per-pack bridge package does not
 
 ## Context
 

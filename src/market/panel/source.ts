@@ -1,16 +1,15 @@
 /**
- * Where the panel's rows come from: the installed packs, their manifests, and the verbs
- * that change them. The panel never touches the disk itself, so a test can swap this out.
+ * Where the panel's rows come from: the installed packs, their artefacts, and the verbs that
+ * change them. The panel never touches the disk itself, so a test can swap this out.
  *
  * @author mystery4f <40482524+mystery4f@users.noreply.github.com>
  */
 
 import { join } from "node:path";
 import { verbDisable, verbEnable, verbRemove, verbUpdate } from "../commands.ts";
-import { listPacks } from "../packs.ts";
-import { marketDir, settingsPath } from "../paths.ts";
-import { readPack } from "../registry/pack.ts";
-import { entryFor, SettingsStore } from "../registry/settings.ts";
+import { findPack, listPacks, scanPackDir } from "../packs.ts";
+import { marketDir } from "../paths.ts";
+import { isEnabled } from "../state.ts";
 import type { PanelRow } from "./model.ts";
 import type { PackDetail } from "./render.ts";
 
@@ -23,45 +22,46 @@ export interface PanelDataSource {
   remove(slug: string): Promise<string>;
 }
 
-const NON_PATH = /^(npm:|git:|builtin:)/;
-
 /** The installed market root, as the panel's one source. */
 export function marketSource(root: string = marketDir()): PanelDataSource {
   return {
     async list() {
-      const [result, settings] = await Promise.all([
-        listPacks(root),
-        SettingsStore.load(settingsPath()),
-      ]);
-      // A pack is enabled when settings loads its own bridge directory; anything else in
-      // the array (an npm package, another plugin) is not ours to interpret.
-      const loaded = new Set(
-        settings.packages().map((value) => (NON_PATH.test(value) ? value : entryFor(value))),
+      const result = await listPacks(root);
+      // A pack is live while its generated tree still matches the market package's globs; a
+      // disabled pack keeps that tree aside, so the check is a directory, not a settings entry.
+      const states = await Promise.all(
+        result.packs.map(async (pack) => isEnabled(join(root, pack.slug))),
       );
-      return result.packs.map((pack) => {
+      return result.packs.map((pack, index) => {
         const row: PanelRow = {
           slug: pack.slug,
           source: pack.source,
           adapter: pack.adapter,
           commit: pack.commit,
-          skills: pack.skills,
-          prompts: pack.prompts,
-          errors: pack.errors,
+          skills: pack.skills.length,
+          prompts: pack.prompts.length,
           updatedAt: pack.updatedAt,
-          enabled: loaded.has(entryFor(join(root, pack.slug))),
+          enabled: states[index] === true,
         };
         return pack.pin === undefined ? row : { ...row, pin: pack.pin };
       });
     },
 
     async detail(slug) {
-      const manifest = await readPack(join(root, slug));
-      if (!manifest) return undefined;
+      const record = await findPack(root, slug);
+      if (!record) return undefined;
+      const artifacts = await scanPackDir(join(root, slug));
       return {
-        plugins: manifest.plugins,
-        skills: manifest.artifacts.skills,
-        prompts: manifest.artifacts.prompts,
-        errors: manifest.errors,
+        source: record.source,
+        adapter: record.adapter,
+        prefix: record.prefix,
+        commit: record.commit,
+        ...(record.ref === undefined ? {} : { ref: record.ref }),
+        ...(record.pin === undefined ? {} : { pin: record.pin }),
+        installedAt: record.installedAt,
+        updatedAt: record.updatedAt,
+        skills: artifacts.skills,
+        prompts: artifacts.prompts,
       };
     },
 

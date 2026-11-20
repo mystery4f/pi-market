@@ -1,32 +1,40 @@
-import { join } from "node:path";
-import { writeJson } from "./pack.ts";
+import { join, relative } from "node:path";
+import { writeJson } from "./json.ts";
 
 /**
- * The package pi loads for one pack (ADR 0001). It lives at the pack root so its resource paths
- * stay inside the package, and it declares nothing but the generated trees: skills and prompts are
- * the only resource types a market source produces.
+ * The one package pi loads for every pack in the market (ADR 0005). It lives at the market root and
+ * globs each pack's generated trees, so installing or removing a pack never edits settings.json.
  */
-export interface BridgeManifest {
+export interface MarketPackage {
   name: string;
   version: string;
   private: true;
   pi: { skills: string[]; prompts: string[] };
 }
 
-export function bridgeManifest(slug: string): BridgeManifest {
+export function marketPackage(): MarketPackage {
   return {
-    name: `pi-market-bridge-${slug}`,
+    name: "pi-market-packs",
     version: "0.0.0",
     private: true,
-    pi: { skills: ["./generated/skills"], prompts: ["./generated/prompts"] },
+    pi: { skills: ["./*/generated/skills"], prompts: ["./*/generated/prompts"] },
   };
 }
 
-export function bridgePath(packDir: string): string {
-  return join(packDir, "package.json");
+export function marketPackagePath(root: string): string {
+  return join(root, "package.json");
 }
 
-export async function writeBridge(packDir: string, slug: string): Promise<string> {
-  await writeJson(bridgePath(packDir), bridgeManifest(slug));
-  return packDir;
+export async function writeMarketPackage(root: string): Promise<string> {
+  await writeJson(marketPackagePath(root), marketPackage());
+  return root;
+}
+
+/**
+ * How settings.json names the market root: relative to the settings file, so the entry survives a
+ * moved home directory and reads the same on every machine.
+ */
+export function marketEntry(settingsPath: string, root: string): string {
+  const relativePath = relative(join(settingsPath, ".."), root);
+  return relativePath.split("\\").join("/");
 }

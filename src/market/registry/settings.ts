@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 const NON_PATH = /^(npm:|git:|builtin:)/;
 
@@ -45,33 +45,36 @@ export class SettingsStore {
     return this.entries().filter((entry): entry is string => typeof entry === "string");
   }
 
-  /** The bridge package name pi lists for one pack. */
-  manifestName(slug: string): string {
-    return `pi-market-bridge-${slug}`;
+  /** A local entry resolved the way pi resolves it: relative to this settings file. */
+  private identity(value: string): string {
+    return isLocal(value) ? resolve(dirname(this.filePath), value) : value;
   }
 
-  async addPack(packDir: string): Promise<void> {
-    const entry = entryFor(packDir);
-    const current = this.packages();
-    const known = current.some((value) =>
-      isLocal(value) ? entryFor(value) === entry : value === entry,
-    );
-    if (known) return;
+  /** True when this exact entry is already listed, comparing local paths by identity. */
+  has(entry: string): boolean {
+    const target = this.identity(entry);
+    return this.packages().some((value) => this.identity(value) === target);
+  }
+
+  /** Add the one package entry pi needs for the whole market; a repeat call is a no-op. */
+  async ensurePackage(entry: string): Promise<void> {
+    if (this.has(entry)) return;
     this.text = setArray(this.text, "packages", [...this.entries(), entry]);
-    assertParses(this.text, "addPack");
+    assertParses(this.text, "ensurePackage");
     await writeFile(this.filePath, this.text, "utf8");
   }
 
-  async removePack(packDir: string): Promise<void> {
-    const entry = entryFor(packDir);
+  /** Drop one package entry, leaving every other entry byte for byte as it was. */
+  async removePackage(entry: string): Promise<void> {
+    const target = this.identity(entry);
     const all = this.entries();
     const kept = all.filter((item) => {
       if (typeof item !== "string") return true;
-      return !(isLocal(item) ? entryFor(item) === entry : item === entry);
+      return this.identity(item) !== target;
     });
     if (kept.length === all.length) return;
     this.text = setArray(this.text, "packages", kept);
-    assertParses(this.text, "removePack");
+    assertParses(this.text, "removePackage");
     await writeFile(this.filePath, this.text, "utf8");
   }
 }

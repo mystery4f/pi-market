@@ -34,7 +34,7 @@ describe("SettingsStore", () => {
       JSON.stringify({ packages: ["npm:@one/a", "C:\\packs\\a"], model: "x" }, null, 2),
       async (dir, file) => {
         const store = await SettingsStore.load(file);
-        await store.addPack(join(dir, "packs", "slug-a"));
+        await store.ensurePackage(join(dir, "packs", "slug-a"));
         const text = await readFile(file, "utf8");
         expect(text).toContain(`"packages"`);
         expect(text).toContain(JSON.stringify(join(dir, "packs", "slug-a")));
@@ -49,8 +49,8 @@ describe("SettingsStore", () => {
   it("refuses to add the same pack twice even through a relative form", async () => {
     await runWithText("{}", async (dir, file) => {
       const store = await SettingsStore.load(file);
-      await store.addPack(join(dir, "packs", "s"));
-      await store.addPack(join(dir, "packs", "s"));
+      await store.ensurePackage(join(dir, "packs", "s"));
+      await store.ensurePackage(join(dir, "packs", "s"));
       const text = await readFile(file, "utf8");
       expect(JSON.parse(text)).toEqual({ packages: [join(dir, "packs", "s")] });
     });
@@ -61,7 +61,7 @@ describe("SettingsStore", () => {
       JSON.stringify({ packages: [join("C:", "packs", "a"), "npm:@one/a"] }, null, 2),
       async (_dir, file) => {
         const store = await SettingsStore.load(file);
-        await store.removePack(join("C:", "packs", "a"));
+        await store.removePackage(join("C:", "packs", "a"));
         const text = await readFile(file, "utf8");
         expect(JSON.parse(text)).toEqual({ packages: ["npm:@one/a"] });
       },
@@ -80,7 +80,7 @@ describe("SettingsStore", () => {
     await runWithText(JSON.stringify(original, null, 2), async (dir, file) => {
       const store = await SettingsStore.load(file);
       expect(store.packages()).toEqual(["npm:@one/a"]);
-      await store.addPack(join(dir, "packs", "slug-a"));
+      await store.ensurePackage(join(dir, "packs", "slug-a"));
       const added = JSON.parse(await readFile(file, "utf8")) as { packages: unknown[] };
       expect(added.packages).toEqual([...original.packages, join(dir, "packs", "slug-a")]);
     });
@@ -89,12 +89,17 @@ describe("SettingsStore", () => {
   it("refuses to write when the span cannot be rebuilt cleanly", async () => {
     await runWithText('{ "packages": [ "npm:@one/a" ]', async (_dir, file) => {
       const store = await SettingsStore.load(file);
-      await expect(store.addPack(join("C:", "packs", "x"))).rejects.toThrow(/does not parse/);
+      await expect(store.ensurePackage(join("C:", "packs", "x"))).rejects.toThrow(/does not parse/);
     });
   });
-  it("reports the bridge package name pi lists for a pack", () => {
-    expect(SettingsStore.prototype.manifestName.call({}, "pm-skills")).toBe(
-      "pi-market-bridge-pm-skills",
-    );
+  it("adds the market entry once, however often an install runs", async () => {
+    await runWithText('{ "packages": ["npm:@one/a"] }', async (dir, file) => {
+      const store = await SettingsStore.load(file);
+      await store.ensurePackage(join(dir, "market"));
+      await store.ensurePackage(join(dir, "market"));
+
+      const again = await SettingsStore.load(file);
+      expect(again.packages()).toEqual(["npm:@one/a", join(dir, "market")]);
+    });
   });
 });

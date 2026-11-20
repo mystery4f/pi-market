@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { installFromDir, slugFor } from "../../src/market/install.ts";
+import { readRegistry, scanPackDir } from "../../src/market/packs.ts";
 import { SettingsStore } from "../../src/market/registry/settings.ts";
 import { withTempDir } from "../support/fixtures.ts";
 import { writeMarketplace } from "../support/source-fixtures.ts";
@@ -18,8 +19,8 @@ describe("slugFor", () => {
   });
 });
 
-describe("installPack", () => {
-  it("installs a marketplace, records it and registers one bridge entry", async () => {
+describe("installFromDir", () => {
+  it("installs a marketplace, records it and registers the market once", async () => {
     await withTempDir(async (dir) => {
       const sourceDir = await writeMarketplace(dir);
       const settingsFile = join(dir, "settings.json");
@@ -35,14 +36,36 @@ describe("installPack", () => {
         now: () => new Date("2026-01-01T00:00:00.000Z"),
       });
 
-      expect(outcome.manifest.slug).toBe("phuryn-pm-skills");
-      expect(outcome.manifest.adapter).toBe("claude-marketplace");
-      expect(outcome.manifest.installedAt).toBe("2026-01-01T00:00:00.000Z");
-      expect(outcome.manifest.artifacts.skills).toEqual(["pm-grill", "pm-retro", "pm-vision"]);
-      expect(outcome.manifest.artifacts.prompts).toEqual(["pm-backlog", "pm-qna"]);
+      expect(outcome.record.slug).toBe("phuryn-pm-skills");
+      expect(outcome.record.adapter).toBe("claude-marketplace");
+      expect(outcome.record.prefix).toBe("pm");
+      expect(outcome.record.installedAt).toBe("2026-01-01T00:00:00.000Z");
+      expect(await scanPackDir(outcome.packDir)).toEqual({
+        skills: ["pm-grill", "pm-retro", "pm-vision"],
+        prompts: ["pm-backlog", "pm-qna"],
+      });
 
       const settingsText = await readFile(settingsFile, "utf8");
-      expect(JSON.parse(settingsText)).toEqual({ model: "keep-me", packages: [outcome.packDir] });
+      expect(JSON.parse(settingsText)).toEqual({ model: "keep-me", packages: ["market"] });
+    });
+  });
+
+  it("records the pack in the market registry, not beside the pack", async () => {
+    await withTempDir(async (dir) => {
+      const sourceDir = await writeMarketplace(dir);
+      const root = join(dir, "market");
+
+      await installFromDir({
+        source: "phuryn/pm-skills",
+        prefix: "pm",
+        sourceDir,
+        commit: "a".repeat(40),
+        root,
+        settings: await SettingsStore.load(join(dir, "settings.json")),
+      });
+
+      const { registry } = await readRegistry(root);
+      expect(registry.packs.map((pack) => pack.slug)).toEqual(["phuryn-pm-skills"]);
     });
   });
 
@@ -73,10 +96,10 @@ describe("installPack", () => {
         now: () => new Date("2026-02-02T00:00:00.000Z"),
       });
 
-      expect(second.manifest.installedAt).toBe(first.manifest.installedAt);
-      expect(second.manifest.updatedAt).toBe("2026-02-02T00:00:00.000Z");
-      expect(second.manifest.pin).toBe("v1");
-      expect(second.manifest.commit).toBe("c".repeat(40));
+      expect(second.record.installedAt).toBe(first.record.installedAt);
+      expect(second.record.updatedAt).toBe("2026-02-02T00:00:00.000Z");
+      expect(second.record.pin).toBe("v1");
+      expect(second.record.commit).toBe("c".repeat(40));
       expect(second.packDir).toBe(first.packDir);
     });
   });
@@ -110,8 +133,11 @@ describe("installPack", () => {
         settings: await SettingsStore.load(join(dir, "settings.json")),
         plugins: ["pm-execution"],
       });
-      expect(outcome.manifest.plugins).toEqual(["pm-execution"]);
-      expect(outcome.manifest.artifacts.skills).toEqual(["pm-grill", "pm-retro"]);
+      expect(outcome.plugins).toBe(1);
+      expect(await scanPackDir(outcome.packDir)).toEqual({
+        skills: ["pm-grill", "pm-retro"],
+        prompts: ["pm-backlog", "pm-qna"],
+      });
     });
   });
 });

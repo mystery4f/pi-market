@@ -1,48 +1,68 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { bridgeManifest, bridgePath, writeBridge } from "../../../src/market/registry/bridge.ts";
-import { readPack, removePack, writePack } from "../../../src/market/registry/pack.ts";
-import { manifest, withTempDir } from "../../support/fixtures.ts";
+import { scanPackDir } from "../../../src/market/packs.ts";
+import {
+  marketEntry,
+  marketPackage,
+  marketPackagePath,
+  writeMarketPackage,
+} from "../../../src/market/registry/bridge.ts";
+import { withTempDir } from "../../support/fixtures.ts";
 
-describe("bridgeManifest", () => {
-  it("declares only the generated skill and prompt trees, relative to the pack root", () => {
-    const manifestValue = bridgeManifest("pm-skills");
-    expect(manifestValue.name).toBe("pi-market-bridge-pm-skills");
-    expect(manifestValue.pi).toEqual({
-      skills: ["./generated/skills"],
-      prompts: ["./generated/prompts"],
+describe("market package", () => {
+  it("globs every pack's generated trees from the market root", () => {
+    const manifest = marketPackage();
+    expect(manifest.name).toBe("pi-market-packs");
+    expect(manifest.pi).toEqual({
+      skills: ["./*/generated/skills"],
+      prompts: ["./*/generated/prompts"],
     });
   });
 
-  it("writes package.json at the pack root so its paths stay inside the package", async () => {
+  it("writes one package.json at the market root, outside every pack", async () => {
     await withTempDir(async (dir) => {
-      const packDir = join(dir, "pm-skills");
-      await writeBridge(packDir, "pm-skills");
+      const root = join(dir, "market");
+      await writeMarketPackage(root);
 
-      expect(bridgePath(packDir)).toBe(join(packDir, "package.json"));
-      const written = JSON.parse(await readFile(join(packDir, "package.json"), "utf8")) as {
+      expect(marketPackagePath(root)).toBe(join(root, "package.json"));
+      const written = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
         pi: { skills: string[] };
       };
-      expect(written.pi.skills).toEqual(["./generated/skills"]);
+      expect(written.pi.skills).toEqual(["./*/generated/skills"]);
     });
+  });
+
+  it("names the market entry relative to the settings file, never absolutely", () => {
+    const entry = marketEntry(
+      join("C:", "Users", "me", ".pi", "agent", "settings.json"),
+      join("C:", "Users", "me", ".pi", "market"),
+    );
+    expect(entry).toBe("../market");
   });
 });
 
 describe("pack registry", () => {
-  it("round-trips a manifest and removes the whole pack", async () => {
+  it("scans the generated trees a pack really holds", async () => {
     await withTempDir(async (dir) => {
-      await writePack(dir, manifest({ slug: "pm-skills" }));
-      expect((await readPack(dir))?.slug).toBe("pm-skills");
+      const packDir = join(dir, "pm-skills");
+      await mkdir(join(packDir, "generated", "skills", "pm-retro"), { recursive: true });
+      await mkdir(join(packDir, "generated", "prompts"), { recursive: true });
+      await writeFile(join(packDir, "generated", "prompts", "pm-backlog.md"), "# x", "utf8");
+      await writeFile(join(packDir, "generated", "prompts", "pm-qna.md"), "# y", "utf8");
 
-      await removePack(dir);
-      expect(await readPack(dir)).toBeUndefined();
+      const artifacts = await scanPackDir(packDir);
+      expect(artifacts).toEqual({ skills: ["pm-retro"], prompts: ["pm-backlog", "pm-qna"] });
     });
   });
 
-  it("reports no manifest for a directory that was never installed", async () => {
+  it("reports no artefacts for a directory that was never installed", async () => {
     await withTempDir(async (dir) => {
-      expect(await readPack(join(dir, "missing"))).toBeUndefined();
+      expect(await scanPackDir(join(dir, "missing"))).toEqual({ skills: [], prompts: [] });
     });
   });
 });
+
+function readFile(path: string, encoding: "utf8"): Promise<string> {
+  return import("node:fs/promises").then((fs) => fs.readFile(path, encoding));
+}

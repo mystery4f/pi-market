@@ -16,7 +16,6 @@ export interface PanelRow {
   pin?: string;
   skills: number;
   prompts: number;
-  errors: number;
   updatedAt: string;
   enabled: boolean;
 }

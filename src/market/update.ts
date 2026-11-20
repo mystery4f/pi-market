@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { installFromDir } from "./install.ts";
-import type { PackManifest } from "./packs.ts";
+import type { PackRecord } from "./packs.ts";
 import type { SettingsStore } from "./registry/settings.ts";
 import { fetchSource } from "./source.ts";
 
@@ -21,10 +21,7 @@ export interface UpdateOptions {
  * Re-fetch a pack's source and re-convert it in place when the commit moved. The pack keeps its
  * slug, its installedAt and its pin; a pin that is already met is not an error.
  */
-export async function updatePack(
-  pack: PackManifest,
-  options: UpdateOptions,
-): Promise<UpdateOutcome> {
+export async function updatePack(pack: PackRecord, options: UpdateOptions): Promise<UpdateOutcome> {
   if (pack.prefix === undefined || pack.prefix.length === 0) {
     throw new Error(
       `${pack.slug} has no prefix (older pack); reinstall it with \`market_install\` to set one`,

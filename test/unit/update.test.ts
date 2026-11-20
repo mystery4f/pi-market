@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { installSource } from "../../src/market/install.ts";
-import type { PackManifest } from "../../src/market/packs.ts";
+import type { PackRecord } from "../../src/market/packs.ts";
 import { SettingsStore } from "../../src/market/registry/settings.ts";
 import { updatePack } from "../../src/market/update.ts";
 import { withTempDir } from "../support/fixtures.ts";
@@ -25,7 +25,7 @@ async function commitAll(dir: string, message: string): Promise<string> {
   return stdout.trim();
 }
 
-async function installFixture(dir: string, source: string): Promise<PackManifest> {
+async function installFixture(dir: string, source: string): Promise<PackRecord> {
   const settingsFile = join(dir, "settings.json");
   await writeFile(settingsFile, "{}", "utf8");
   const outcome = await installSource({
@@ -36,7 +36,7 @@ async function installFixture(dir: string, source: string): Promise<PackManifest
     settings: await SettingsStore.load(settingsFile),
     now: () => new Date("2026-01-01T00:00:00.000Z"),
   });
-  return outcome.manifest;
+  return outcome.record;
 }
 
 async function addExtraSkill(sourceDir: string): Promise<void> {

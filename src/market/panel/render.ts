@@ -33,8 +33,7 @@ export function renderRow(theme: Theme, row: PanelRow, selected: boolean, width:
   const head = `${cursor} ${theme.bold(selected ? theme.fg("accent", name) : name)} ${theme.fg("muted", counts)}`;
   const off = row.enabled ? "" : ` ${theme.fg("warning", "off")}`;
   const pin = row.pin === undefined ? "" : ` ${theme.fg("dim", `pinned@${row.pin.slice(0, 7)}`)}`;
-  const errors = row.errors > 0 ? ` ${theme.fg("error", `${String(row.errors)} skipped`)}` : "";
-  const meta = `  ${theme.fg("dim", `${row.adapter} ${row.commit.slice(0, 7)}`)}${pin}${errors}${off}`;
+  const meta = `  ${theme.fg("dim", `${row.adapter} ${row.commit.slice(0, 7)}`)}${pin}${off}`;
   return [truncateToWidth(head, width, "…", true), truncateToWidth(meta, width, "…", true)];
 }
 
@@ -112,18 +111,24 @@ function wrapped(theme: Theme, label: string, items: readonly string[], width: n
   return lines;
 }
 
-/** What a pack converted and what it refused: the detail page's second half. */
+/** What a pack converted: the artefact names, read from the generated tree on each visit. */
 export interface PackDetail {
-  plugins: readonly string[];
+  source: string;
+  adapter: string;
+  prefix: string;
+  commit: string;
+  ref?: string;
+  pin?: string;
+  installedAt: string;
+  updatedAt: string;
   skills: readonly string[];
   prompts: readonly string[];
-  errors: readonly { source: string; message: string }[];
 }
 
 /**
- * The detail page: everything pack.json kept, plus what the pack converted and refused.
- * The rows are read-only on purpose — the pack is changed by the list's actions, and a
- * page that could also change it would be a second writer of the same file.
+ * The detail page: the registry record plus the artefact names read from the generated tree.
+ * The rows are read-only on purpose — the pack is changed by the list's actions, and a page
+ * that could also change it would be a second writer of the same registry.
  */
 export function renderDetail(
   theme: Theme,
@@ -137,22 +142,15 @@ export function renderDetail(
   lines.push("");
   const field = (label: string, value: string) => `${theme.fg("muted", pad(label, 11))}${value}`;
   lines.push(field("source", row.source));
+  lines.push(field("prefix", detail.prefix));
   lines.push(field("adapter", row.adapter));
   lines.push(field("commit", row.commit.slice(0, 10)));
-  if (row.pin !== undefined) lines.push(field("pin", row.pin.slice(0, 10)));
+  if (row.pin !== undefined) lines.push(field("pin", row.pin.slice(0, 7)));
+  lines.push(field("installed", detail.installedAt));
   lines.push(field("updated", row.updatedAt));
   lines.push("");
-  lines.push(...wrapped(theme, "plugins", detail.plugins, width));
   lines.push(...wrapped(theme, "skills", detail.skills, width));
   lines.push(...wrapped(theme, "prompts", detail.prompts, width));
-  if (detail.errors.length > 0) {
-    lines.push("");
-    for (const error of detail.errors) {
-      lines.push(
-        theme.fg("error", truncateToWidth(`${error.source}: ${error.message}`, width, "…", true)),
-      );
-    }
-  }
   lines.push("");
   lines.push(theme.fg("dim", truncateToWidth(footerFor("detail"), width, "…", true)));
   return lines.map((line) => truncateToWidth(line, width, "…", true));

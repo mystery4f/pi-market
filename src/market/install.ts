@@ -1,10 +1,10 @@
 import { basename, join } from "node:path";
 import { readSource } from "./adapters/index.ts";
-import { convert } from "./converter/convert.ts";
+import { type ConvertError, convert } from "./converter/convert.ts";
 import { foldSegment } from "./converter/naming.ts";
-import type { PackManifest } from "./packs.ts";
-import { bridgePath, writeBridge } from "./registry/bridge.ts";
-import { readPack, writePack } from "./registry/pack.ts";
+import type { Rewrite } from "./converter/rewrite.ts";
+import { findPack, type PackRecord, scanPackDir, upsertPack } from "./packs.ts";
+import { marketEntry, writeMarketPackage } from "./registry/bridge.ts";
 import type { SettingsStore } from "./registry/settings.ts";
 import { fetchSource } from "./source.ts";
 
@@ -47,11 +47,17 @@ export interface InstallRequest extends Omit<InstallInput, "sourceDir" | "commit
   cacheRoot: string;
 }
 
+/** What an install produced. The rewrite log and the skipped entries are reported, not stored. */
 export interface InstallOutcome {
-  manifest: PackManifest;
+  record: PackRecord;
   packDir: string;
-  /** The file pi loads the pack through. */
-  bridge: string;
+  /** The one package pi loads every pack through. */
+  packageFile: string;
+  plugins: number;
+  skills: number;
+  prompts: number;
+  rewrites: readonly Rewrite[];
+  errors: readonly ConvertError[];
 }
 
 export async function installSource(request: InstallRequest): Promise<InstallOutcome> {
@@ -65,14 +71,13 @@ export async function installSource(request: InstallRequest): Promise<InstallOut
 }
 
 /**
- * Convert one source tree into one pack: read it, convert it, write the manifest, and register
- * the bridge package in settings. A re-install keeps `installedAt` and the pin, so an update
- * reads as an update rather than a fresh install.
+ * Convert one source tree into one pack: read it, convert it, record it in the registry, and
+ * register the bridge package in settings. A re-install keeps `installedAt` and the pin, so an
+ * update reads as an update rather than a fresh install.
  */
 export async function installFromDir(input: InstallInput): Promise<InstallOutcome> {
   const slug = slugFor(input.source);
   const packDir = join(input.root, slug);
-  const previous = await readPack(packDir);
 
   const model = await readSource(input.sourceDir, {
     ...(input.adapter === undefined ? {} : { adapter: input.adapter }),
@@ -95,8 +100,9 @@ export async function installFromDir(input: InstallInput): Promise<InstallOutcom
   }
 
   const timestamp = (input.now?.() ?? new Date()).toISOString();
+  const previous = await findPack(input.root, slug);
   const pin = input.pin ?? previous?.pin;
-  const manifest: PackManifest = {
+  const record: PackRecord = {
     slug,
     source: input.source,
     prefix: input.prefix,
@@ -106,32 +112,24 @@ export async function installFromDir(input: InstallInput): Promise<InstallOutcom
     ...(pin === undefined ? {} : { pin }),
     installedAt: previous?.installedAt ?? timestamp,
     updatedAt: timestamp,
-    plugins: model.plugins.map((plugin) => plugin.name),
-    artifacts: {
-      skills: result.skills.map((skill) => skill.name),
-      prompts: result.commands.map((command) => command.name),
-    },
+  };
+
+  await upsertPack(input.root, record);
+  const packageFile = await writeMarketPackage(input.root);
+  await input.settings.ensurePackage(marketEntry(input.settings.filePath, input.root));
+  const artifacts = await scanPackDir(packDir);
+
+  return {
+    record,
+    packDir,
+    packageFile,
+    plugins: model.plugins.length,
+    skills: artifacts.skills.length,
+    prompts: artifacts.prompts.length,
     rewrites: [
-      ...result.skills.flatMap((skill) =>
-        skill.rewrites.map((rewrite) => ({
-          ...rewrite,
-          where: `generated/skills/${skill.name}/SKILL.md`,
-        })),
-      ),
-      ...result.commands.flatMap((command) =>
-        command.rewrites.map((rewrite) => ({
-          ...rewrite,
-          where: `generated/prompts/${command.name}.md`,
-        })),
-      ),
+      ...result.skills.flatMap((skill) => skill.rewrites),
+      ...result.commands.flatMap((command) => command.rewrites),
     ],
     errors: result.errors,
   };
-
-  await writePack(packDir, manifest);
-  const bridge = bridgePath(packDir);
-  await writeBridge(packDir, slug);
-  await input.settings.addPack(packDir);
-
-  return { manifest, packDir, bridge };
 }

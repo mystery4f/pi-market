@@ -122,7 +122,16 @@ export class MarketPanel implements Component {
     const row = this.detailRow();
     if (row === undefined)
       return this.annotate(renderList(this.theme, this.state, this.width, this.frameHeight));
-    const detail = this.detail ?? { plugins: [], skills: [], prompts: [], errors: [] };
+    const detail = this.detail ?? {
+      source: "",
+      adapter: "",
+      prefix: "",
+      commit: "",
+      installedAt: "",
+      updatedAt: "",
+      skills: [],
+      prompts: [],
+    };
     const body = renderDetail(this.theme, row, detail, this.width);
     const footer = this.theme.fg("dim", "← back · alt+q close");
     return this.annotate([...body.slice(0, -1), footer]);

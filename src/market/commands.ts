@@ -1,11 +1,17 @@
 import { join } from "node:path";
 import { cacheRoot, doctor } from "./doctor.ts";
 import { installSource } from "./install.ts";
-import { listPacks, type PackManifest, type PackReadResult } from "./packs.ts";
+import {
+  listPacks,
+  type PackReadResult,
+  type PackRecord,
+  removePackRecord,
+  resolvePack,
+  scanPackDir,
+} from "./packs.ts";
 import { marketDir, settingsPath } from "./paths.ts";
-import { readPack } from "./registry/pack.ts";
-import { resolvePack } from "./registry/resolve.ts";
 import { SettingsStore } from "./registry/settings.ts";
+import { setEnabled } from "./state.ts";
 import { removePackDir } from "./uninstall.ts";
 import { updatePack } from "./update.ts";
 
@@ -15,12 +21,15 @@ export interface VerbResult {
   details: Record<string, unknown>;
 }
 
-/** Resolve a pack reference (slug, source string, or path) to its directory, or throw. */
-async function requirePack(ref: string): Promise<string> {
-  const packed = await resolvePack(ref, marketDir());
-  if (!packed) throw new Error(`No pack matches ${ref}. Try \`market_list\` first.`);
-  return packed;
+/** Resolve a pack reference (slug, source string, or path) to its record, or throw. */
+async function requirePack(ref: string): Promise<PackRecord> {
+  const record = await resolvePack(ref, marketDir());
+  if (!record) throw new Error(`No pack matches ${ref}. Try \`market_list\` first.`);
+  return record;
 }
+
+const toDir = (root: string, record: PackRecord): string => join(root, record.slug);
+const short = (commit: string): string => commit.slice(0, 7);
 
 export async function verbList(): Promise<VerbResult> {
   const root = marketDir();
@@ -31,13 +40,12 @@ export async function verbList(): Promise<VerbResult> {
   }
   for (const pack of result.packs) {
     const pin = pack.pin ? ` pinned at ${pack.pin}` : "";
-    const errors = pack.errors > 0 ? `, ${pack.errors} skipped` : "";
     lines.push(
-      `${pack.slug} — ${pack.skills} skills, ${pack.prompts} prompts${errors} (${pack.prefix}, ${pack.adapter}, ${pack.commit.slice(0, 7)}${pin})`,
+      `${pack.slug} — ${pack.skills.length} skills, ${pack.prompts.length} prompts (${pack.prefix}, ${pack.adapter}, ${short(pack.commit)}${pin})`,
     );
   }
   for (const problem of result.problems) {
-    lines.push(`Unreadable pack: ${problem.path} — ${problem.message}`);
+    lines.push(`${problem.message}${problem.path.length === 0 ? "" : `: ${problem.path}`}`);
   }
   return {
     text: lines.join("\n"),
@@ -73,36 +81,43 @@ export async function verbInstall(args: InstallVerbArgs): Promise<VerbResult> {
     ...(args.plugins === undefined ? {} : { plugins: args.plugins }),
     ...(args.adapter === undefined ? {} : { adapter: args.adapter }),
   });
-  const text = `${outcome.manifest.slug} installed (${outcome.manifest.plugins.length} plugins, ${outcome.manifest.artifacts.skills.length} skills, ${outcome.manifest.artifacts.prompts.length} prompts) at ${outcome.packDir}`;
-  return { text, details: { packDir: outcome.packDir, manifest: outcome.manifest } };
+  const runs = outcome.rewrites.length;
+  const skipped = outcome.errors.length;
+  const text = `${outcome.record.slug} installed (${outcome.plugins} plugins, ${outcome.skills} skills, ${outcome.prompts} prompts) at ${outcome.packDir}${runs === 0 ? "" : `; ${runs} references rewritten`}${skipped === 0 ? "" : `; ${skipped} entries skipped`}`;
+  return {
+    text,
+    details: {
+      packDir: outcome.packDir,
+      record: outcome.record,
+      rewrites: outcome.rewrites,
+      errors: outcome.errors,
+    },
+  };
 }
 
 export async function verbUpdate(ref?: string): Promise<VerbResult> {
   const root = marketDir();
   const settings = await SettingsStore.load(settingsPath());
-  const target = ref === undefined ? await listPacks(root) : undefined;
 
   if (ref !== undefined) {
-    const packDir = await requirePack(ref);
-    const manifest = (await readPack(packDir)) as PackManifest;
-    const outcome = await updatePack(manifest, { root, cacheRoot: cacheRoot(), settings });
+    const record = await requirePack(ref);
+    const outcome = await updatePack(record, { root, cacheRoot: cacheRoot(), settings });
     const text = outcome.changed
-      ? `${outcome.packDir}: ${manifest.commit.slice(0, 7)} → ${outcome.commit.slice(0, 7)}`
-      : `${outcome.packDir}: already at ${outcome.commit.slice(0, 7)}`;
+      ? `${record.slug}: ${short(record.commit)} → ${short(outcome.commit)}`
+      : `${record.slug}: already at ${short(record.commit)}`;
     return { text, details: { packDir: outcome.packDir, changed: outcome.changed } };
   }
 
   // No target: update every installed pack, one line each.
+  const result = await listPacks(root);
   const lines: string[] = [];
-  for (const pack of target?.packs ?? []) {
-    const packDir = join(root, pack.slug);
-    const manifest = (await readPack(packDir)) as PackManifest;
+  for (const pack of result.packs) {
     try {
-      const outcome = await updatePack(manifest, { root, cacheRoot: cacheRoot(), settings });
+      const outcome = await updatePack(pack, { root, cacheRoot: cacheRoot(), settings });
       lines.push(
         outcome.changed
-          ? `${pack.slug}: ${manifest.commit.slice(0, 7)} → ${outcome.commit.slice(0, 7)}`
-          : `${pack.slug}: already at ${manifest.commit.slice(0, 7)}`,
+          ? `${pack.slug}: ${short(pack.commit)} → ${short(outcome.commit)}`
+          : `${pack.slug}: already at ${short(pack.commit)}`,
       );
     } catch (error) {
       lines.push(`${pack.slug}: ${(error as Error).message}`);
@@ -115,23 +130,45 @@ export async function verbUpdate(ref?: string): Promise<VerbResult> {
 }
 
 export async function verbRemove(ref: string): Promise<VerbResult> {
-  const settings = await SettingsStore.load(settingsPath());
-  const packDir = await requirePack(ref);
-  await settings.removePack(packDir);
+  const record = await requirePack(ref);
+  const packDir = toDir(marketDir(), record);
+  await removePackRecord(marketDir(), record.slug);
   await removePackDir(packDir);
   return { text: `${packDir} removed`, details: { packDir } };
 }
 
 export async function verbDisable(ref: string): Promise<VerbResult> {
-  const settings = await SettingsStore.load(settingsPath());
-  const packDir = await requirePack(ref);
-  await settings.removePack(packDir);
-  return { text: `${packDir} disabled`, details: { packDir, disabled: true } };
+  const record = await requirePack(ref);
+  await setEnabled(toDir(marketDir(), record), false);
+  return { text: `${record.slug} disabled`, details: { slug: record.slug, disabled: true } };
 }
 
 export async function verbEnable(ref: string): Promise<VerbResult> {
-  const settings = await SettingsStore.load(settingsPath());
-  const packDir = await requirePack(ref);
-  await settings.addPack(packDir);
-  return { text: `${packDir} enabled`, details: { packDir, disabled: false } };
+  const record = await requirePack(ref);
+  await setEnabled(toDir(marketDir(), record), true);
+  return { text: `${record.slug} enabled`, details: { slug: record.slug, disabled: false } };
+}
+
+export async function verbDetail(ref: string): Promise<VerbResult> {
+  const record = await requirePack(ref);
+  const root = marketDir();
+  const dir = toDir(root, record);
+  const artifacts = await scanPackDir(dir);
+  const lines = [
+    `slug     ${record.slug}`,
+    `source   ${record.source}`,
+    `prefix   ${record.prefix}`,
+    `adapter  ${record.adapter}`,
+    `commit   ${record.commit}`,
+    ...(record.ref === undefined ? [] : [`ref      ${record.ref}`]),
+    ...(record.pin === undefined ? [] : [`pin      ${record.pin}`]),
+    `installed ${record.installedAt}`,
+    `updated   ${record.updatedAt}`,
+    `skills   ${artifacts.skills.length}`,
+    `prompts  ${artifacts.prompts.length}`,
+  ];
+  return {
+    text: lines.join("\n"),
+    details: { record, artifacts, dir },
+  };
 }

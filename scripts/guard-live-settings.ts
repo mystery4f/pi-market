@@ -18,7 +18,7 @@ const before = JSON.parse(readFileSync(copy, "utf8")) as { packages: unknown[] }
 console.log("before:", before.packages.length, "packages,", Object.keys(before).length, "keys");
 
 const store = await SettingsStore.load(copy);
-await store.addPack(join(dir, "market", "slug-probe"));
+await store.ensurePackage("../market");
 const added = JSON.parse(readFileSync(copy, "utf8")) as typeof before;
 console.log("after add:", added.packages.length, "packages");
 if (added.packages.length !== before.packages.length + 1) throw new Error("entry not appended");
@@ -34,7 +34,7 @@ const lostEntries = before.packages
 if (lostEntries.length > 0) throw new Error(`packages lost: ${lostEntries.join(", ")}`);
 
 const after2 = await SettingsStore.load(copy);
-await after2.removePack(join(dir, "market", "slug-probe"));
+await after2.removePackage("../market");
 const removed = JSON.parse(readFileSync(copy, "utf8")) as typeof before;
 if (JSON.stringify(removed.packages) !== JSON.stringify(before.packages)) {
   throw new Error("remove did not restore the original list");

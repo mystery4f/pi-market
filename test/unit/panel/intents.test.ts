@@ -37,7 +37,6 @@ function row(overrides: Partial<PanelRow> = {}): PanelRow {
     commit: "a1b2c3d4e5f6",
     skills: 2,
     prompts: 2,
-    errors: 0,
     updatedAt: "2026-11-19T12:00:00.000Z",
     enabled: true,
     ...overrides,
@@ -183,20 +182,24 @@ describe("layout", () => {
     for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(40);
   });
 
-  it("shows what a pack converted and what it refused", () => {
+  it("shows what a pack converted", () => {
     const detail = renderDetail(
       theme,
-      row({ errors: 1 }),
+      row(),
       {
-        plugins: ["pm-execution"],
+        source: "phuryn/pm-skills",
+        adapter: "claude-marketplace",
+        prefix: "pm",
+        commit: "a1b2c3d4e5f6",
+        installedAt: "2026-11-19T12:00:00.000Z",
+        updatedAt: "2026-11-19T12:00:00.000Z",
         skills: ["pm-execution-retro", "pm-execution-grill"],
         prompts: ["pm-execution-backlog"],
-        errors: [{ source: "code-review", message: "moved upstream" }],
       },
       70,
     ).join("\n");
     expect(detail).toContain("pm-execution-retro");
-    expect(detail).toContain("code-review: moved upstream");
+    expect(detail).toContain("pm-execution-backlog");
     expect(detail).toContain("claude-marketplace");
   });
 });
