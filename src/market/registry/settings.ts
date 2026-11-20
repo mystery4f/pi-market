@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 const NON_PATH = /^(npm:|git:|builtin:)/;
@@ -17,15 +17,12 @@ function isLocal(value: string): boolean {
  */
 export class SettingsStore {
   private readonly text: string;
-  /** Why `JSON.parse` refused the file, or undefined when it is intact. */
-  readonly parseError: string | undefined;
 
   private constructor(
     text: string,
     readonly filePath: string,
   ) {
     this.text = text;
-    this.parseError = parseProblem(text);
   }
 
   static async load(path: string): Promise<SettingsStore> {
@@ -38,9 +35,6 @@ export class SettingsStore {
 
   /** Every entry as written, including the object forms pi itself accepts. */
   entries(): unknown[] {
-    // A document pi itself refuses to parse is not a source of truth: report nothing rather
-    // than hand the caller spans carved out of a broken file.
-    if (this.parseError !== undefined) return [];
     return parseArray(this.text, "packages") ?? [];
   }
 
@@ -58,47 +52,6 @@ export class SettingsStore {
   has(entry: string): boolean {
     const target = this.identity(entry);
     return this.packages().some((value) => this.identity(value) === target);
-  }
-
-  /** Rewrites `settings.json.bak-*` files beside this one, newest first. Never writes. */
-  async backups(): Promise<string[]> {
-    const folder = dirname(this.filePath);
-    let names: string[];
-    try {
-      names = await readdir(folder);
-    } catch {
-      return [];
-    }
-    const found = names.filter((name) => name.startsWith(`${basenameOf(this.filePath)}.bak`));
-    const stamped = await Promise.all(
-      found.map(async (name) => ({
-        path: resolve(folder, name),
-        at: await mtime(resolve(folder, name)),
-      })),
-    );
-    return stamped.sort((left, right) => right.at - left.at).map((item) => item.path);
-  }
-}
-
-function basenameOf(path: string): string {
-  const at = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return at === -1 ? path : path.slice(at + 1);
-}
-
-async function mtime(path: string): Promise<number> {
-  try {
-    return (await stat(path)).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
-function parseProblem(text: string): string | undefined {
-  try {
-    JSON.parse(text);
-    return undefined;
-  } catch (error) {
-    return (error as Error).message;
   }
 }
 

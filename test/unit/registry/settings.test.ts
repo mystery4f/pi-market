@@ -1,4 +1,4 @@
-import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -25,7 +25,6 @@ describe("SettingsStore", () => {
       async (_dir, file) => {
         const store = await SettingsStore.load(file);
         expect(store.packages()).toEqual(["npm:@one/a", "C:\\packs\\a"]);
-        expect(store.parseError).toBeUndefined();
       },
     );
   });
@@ -67,27 +66,6 @@ describe("SettingsStore", () => {
       const store = await SettingsStore.load(file);
       expect(store.has(join(dir, "..", "market"))).toBe(true);
       expect(store.has(join(dir, "..", "elsewhere"))).toBe(false);
-    });
-  });
-
-  it("reports a broken document instead of pretending it is empty", async () => {
-    await runWithText('{ "packages": [ "npm:@one/a" ]', async (_dir, file) => {
-      const store = await SettingsStore.load(file);
-      expect(store.packages()).toEqual([]);
-      expect(store.parseError).toMatch(/after property value|Unexpected/);
-    });
-  });
-
-  it("lists the backups beside the file, newest first", async () => {
-    await runWithText("{}", async (dir, file) => {
-      const older = join(dir, "settings.json.bak-migrate");
-      const newer = join(dir, "settings.json.bak-no-entry");
-      await writeFile(older, "{}", "utf8");
-      await writeFile(newer, "{}", "utf8");
-      await utimes(older, new Date(1_000_000), new Date(1_000_000));
-
-      const store = await SettingsStore.load(file);
-      expect(await store.backups()).toEqual([newer, older]);
     });
   });
 });

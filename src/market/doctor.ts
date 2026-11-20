@@ -25,12 +25,7 @@ export async function doctor(root: string, settings: SettingsStore): Promise<Doc
   const issues: string[] = [];
   const result = await listPacks(root);
 
-  if (settings.parseError !== undefined) {
-    issues.push(`settings.json does not parse (${settings.parseError}); pi cannot read it`);
-    for (const backup of await settings.backups()) {
-      issues.push(`restore a backup to recover: copy "${backup}" over "${settings.filePath}"`);
-    }
-  } else if (!reachesPacks(settings.packages())) {
+  if (!reachesPacks(settings.packages())) {
     issues.push(
       `settings.json does not load ${EXTENSION_SOURCE}; packs stay invisible until it does`,
     );
