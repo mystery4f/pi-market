@@ -213,7 +213,8 @@ export default function marketExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(result.text, "info");
         if (changesArtefacts(verb ?? "", result.details)) {
           ctx.ui.notify("Reloading to pick the change up.", "info");
-          await ctx.reload();
+          // After reload the ctx above is stale, so nothing below may touch it.
+          await ctx.reload().catch(() => undefined);
         }
       } catch (error) {
         ctx.ui.notify((error as Error).message, "error");
