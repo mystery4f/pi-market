@@ -149,6 +149,7 @@ describe("verb surface", () => {
         await verbInstall({ source, prefix: "pm" });
         const result = await verbUpdate();
         expect(result.text).toContain("already at");
+        expect(result.details).toEqual({ updated: 1 });
       });
     });
   });
