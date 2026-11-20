@@ -211,11 +211,27 @@ export default function marketExtension(pi: ExtensionAPI): void {
             break;
         }
         ctx.ui.notify(result.text, "info");
+        if (changesArtefacts(verb ?? "", result.details)) {
+          ctx.ui.notify("Reloading to pick the change up.", "info");
+          await ctx.reload();
+        }
       } catch (error) {
         ctx.ui.notify((error as Error).message, "error");
       }
     },
   });
+}
+
+/**
+ * Whether a verb touched files pi only reads at startup, so this session has to
+ * reload to see them. Read-only verbs and a no-op update leave the session be.
+ */
+function changesArtefacts(verb: string, details: Record<string, unknown>): boolean {
+  if (verb === "install" || verb === "remove" || verb === "disable" || verb === "enable")
+    return true;
+  if (verb !== "update") return false;
+  if (details.changed === true) return true;
+  return typeof details.updated === "number" && details.updated > 0;
 }
 
 /** Turn `--plugins a,b --prefix pm --adapter x` into the verb args the installer expects. */
